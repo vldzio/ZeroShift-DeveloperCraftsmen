@@ -1,0 +1,55 @@
+# AWS Systems Manager Change Manager change template.
+# Used by ZeroShift Part 3 Component 2 (SCP Refactoring) and — when they land —
+# Parts 1 and 2 whenever any SCP or high-risk IAM change is applied.
+#
+# The template enforces the spec's rule that all SCP mutations require two
+# distinct human approvers before the runbook Lambda applies the change.
+#
+# Register with: aws ssm create-document \
+#     --name ZeroShiftScpMutationTwoApprover \
+#     --document-type ChangeTemplate \
+#     --document-format YAML \
+#     --content file://scp_mutation_two_approver.yaml
+#
+# Once registered, refactor proposals attach as change requests referencing
+# this template. Approvals must come from two distinct principals that are
+# members of the ZeroShift-Approvers group.
+
+schemaVersion: '0.3'
+description: |
+  ZeroShift SCP mutation template. Any change request instantiated from this
+  template must be approved by exactly two distinct approvers before the
+  runbook automation executes. The runbook is expected to apply an SCP
+  change via AWS Organizations after equivalence validation via
+  IAM Policy Simulator.
+
+templateInformation: |
+  This template is owned by ZeroShift. It exists to enforce the two-approver
+  invariant defined in zeroshift.md. Do not lower the minimum approver count
+  or remove the equivalence-check pre-condition.
+
+emergencyChange: false
+scheduledEndTime: '{{PLACEHOLDER}}'
+scheduledStartTime: '{{PLACEHOLDER}}'
+
+executableRunBooks:
+  - name: ZeroShiftScpApplyRunbook
+    version: '$DEFAULT'
+
+approvals:
+  minRequiredApprovals: 2
+  approvers:
+    - approvers:
+        - approver: 'ZeroShift-Approvers'
+          type: Group
+      minRequiredApprovals: 2
+
+notifications:
+  - arn: '{{SnsApprovalRequestsTopicArn}}'
+    events:
+      - ChangeRequestCreated
+      - ChangeRequestApproved
+      - ChangeRequestRejected
+      - ChangeRequestExecutionStarted
+      - ChangeRequestExecutionCompleted
+      - ChangeRequestExecutionFailed

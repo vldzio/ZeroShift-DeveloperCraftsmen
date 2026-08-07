@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ZeroShift Console</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <span class="brand-mark">Z</span>
+      <div class="brand-text">
+        <div class="brand-title">ZeroShift</div>
+        <div class="brand-subtitle">Autonomous IAM lifecycle for AWS · Part 3</div>
+      </div>
+    </div>
+    <div class="api-status">
+      <label for="api-url">API endpoint</label>
+      <input id="api-url" type="text" placeholder="https://xxx.execute-api.us-east-1.amazonaws.com" />
+    </div>
+  </header>
+
+  <div class="shell">
+    <nav class="sidebar" aria-label="Feature navigation">
+      <button class="nav-item active" data-view="denial">
+        <span class="nav-icon">◈</span>
+        <div class="nav-label">
+          <div class="nav-title">Denial Analysis</div>
+          <div class="nav-sub">SCP root-cause explainer</div>
+        </div>
+      </button>
+      <button class="nav-item" data-view="refactor">
+        <span class="nav-icon">◆</span>
+        <div class="nav-label">
+          <div class="nav-title">SCP Refactoring</div>
+          <div class="nav-sub">Compress oversized SCPs</div>
+        </div>
+      </button>
+      <button class="nav-item" data-view="stale">
+        <span class="nav-icon">◇</span>
+        <div class="nav-label">
+          <div class="nav-title">Stale SCP Detection</div>
+          <div class="nav-sub">Dead-deny recommendations</div>
+        </div>
+      </button>
+      <button class="nav-item" data-view="drift">
+        <span class="nav-icon">✦</span>
+        <div class="nav-label">
+          <div class="nav-title">IAM Drift Detection</div>
+          <div class="nav-sub">Role scoping + remediation</div>
+        </div>
+      </button>
+      <button class="nav-item" data-view="codeanalyzer">
+        <span class="nav-icon">◉</span>
+        <div class="nav-label">
+          <div class="nav-title">Code Analyzer</div>
+          <div class="nav-sub">Source → intent registry</div>
+        </div>
+      </button>
+    </nav>
+
+    <!-- ============================================================= -->
+    <!-- DENIAL ANALYSIS VIEW                                           -->
+    <!-- ============================================================= -->
+    <main class="view" id="view-denial">
+      <div class="workspace">
+        <section class="input-panel">
+          <div class="panel-header">
+            <h2>1. Choose a denial event</h2>
+            <p class="hint">Pick a canned fixture or paste your own CloudTrail access-denied event JSON.</p>
+          </div>
+
+          <div class="fixture-picker">
+            <button class="fixture-btn" data-fixture="production-region-deny">
+              <div class="fixture-name">Production region deny</div>
+              <div class="fixture-desc">S3 PutObject in ap-south-1 from prod account</div>
+            </button>
+            <button class="fixture-btn" data-fixture="root-instance-type-deny">
+              <div class="fixture-name">Root instance-type deny</div>
+              <div class="fixture-desc">ec2:RunInstances p5.48xlarge; CT SCP also in path</div>
+            </button>
+            <button class="fixture-btn" data-fixture="account-iam-wildcard-deny">
+              <div class="fixture-name">Account IAM wildcard deny</div>
+              <div class="fixture-desc">iam:AttachRolePolicy AdministratorAccess</div>
+            </button>
+          </div>
+
+          <textarea id="event-json" spellcheck="false" placeholder="Paste a CloudTrail access-denied event JSON here…"></textarea>
+
+          <div class="actions">
+            <button id="analyze-btn" class="primary">Analyze Denial</button>
+            <span id="analyze-status" class="status-inline"></span>
+          </div>
+        </section>
+
+        <section class="output-panel">
+          <div class="panel-header">
+            <h2>2. Analysis</h2>
+            <p class="hint">Hierarchy traversal · IAM Policy Simulator · Kimi K2.5 on Bedrock</p>
+          </div>
+
+          <div id="result-empty" class="result-empty">
+            Select a fixture and click <strong>Analyze Denial</strong> to see the identified SCP, the offending statement, and a suggested fix.
+          </div>
+
+          <div id="result-view" class="result-view hidden">
+            <div class="verdict">
+              <div class="verdict-label">Denied by</div>
+              <div class="verdict-scp" id="verdict-scp">—</div>
+              <div class="verdict-meta" id="verdict-meta">—</div>
+              <div id="verdict-ct-badge" class="ct-badge hidden">
+                <span class="badge">Control Tower–managed</span>
+                <span class="badge-note">Modifications must go through Control Tower, not ZeroShift.</span>
+              </div>
+            </div>
+
+            <div class="section">
+              <div class="section-label">Summary</div>
+              <div class="section-body" id="explanation-summary">—</div>
+            </div>
+
+            <div class="section">
+              <div class="section-label">Cause</div>
+              <div class="section-body" id="explanation-cause">—</div>
+            </div>
+
+            <div class="section">
+              <div class="section-label">Suggested fix</div>
+              <div class="section-body" id="explanation-fix">—</div>
+            </div>
+
+            <div class="section" id="condition-keys-section">
+              <div class="section-label">Affected condition keys</div>
+              <div class="section-body">
+                <ul id="condition-keys-list" class="key-list"></ul>
+              </div>
+            </div>
+
+            <div class="section" id="ct-path-section">
+              <div class="section-label">Control Tower SCPs also in path</div>
+              <div class="section-body">
+                <ul id="ct-path-list" class="key-list"></ul>
+              </div>
+            </div>
+
+            <details class="raw-details">
+              <summary>Raw response</summary>
+              <pre id="raw-response"></pre>
+            </details>
+          </div>
+
+          <div id="result-error" class="result-error hidden">
+            <div class="error-label">Error</div>
+            <div class="error-body" id="error-message">—</div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <!-- ============================================================= -->
+    <!-- SCP REFACTORING VIEW                                           -->
+    <!-- ============================================================= -->
+    <main class="view hidden" id="view-refactor">
+      <div class="workspace">
+        <section class="input-panel">
+          <div class="panel-header">
+            <h2>1. Choose an SCP</h2>
+            <p class="hint">Provide an SCP policy ID. The workflow only proposes changes for SCPs above the 8,192-byte threshold; smaller SCPs short-circuit at Check Size.</p>
+          </div>
+
+          <div class="fixture-picker">
+            <button class="scp-btn" data-scp="p-prod-oversized-deny">
+              <div class="fixture-name">p-prod-oversized-deny</div>
+              <div class="fixture-desc">8,677 bytes · 40 redundant Deny statements · demo target</div>
+            </button>
+            <button class="scp-btn" data-scp="p-aws-guardrails-deny-root-user">
+              <div class="fixture-name">p-aws-guardrails-deny-root-user</div>
+              <div class="fixture-desc">Control Tower–managed · short-circuits at CheckControlTower</div>
+            </button>
+            <button class="scp-btn" data-scp="p-prod-deny-regions">
+              <div class="fixture-name">p-prod-deny-regions</div>
+              <div class="fixture-desc">Under threshold · short-circuits at CheckSize</div>
+            </button>
+          </div>
+
+          <label class="scp-id-label" for="scp-id-input">SCP policy ID</label>
+          <input id="scp-id-input" type="text" spellcheck="false" placeholder="p-prod-oversized-deny" value="p-prod-oversized-deny" />
+
+          <div class="actions">
+            <button id="refactor-btn" class="primary">Start Refactor</button>
+            <span id="refactor-status-inline" class="status-inline"></span>
+          </div>
+
+          <label style="font-size:12px; color:var(--text-muted); margin-top:8px; display:block;">
+            <input type="checkbox" id="refactor-use-agent" /> 🤖 Autonomous apply (LangGraph + Kimi K2.5)
+          </label>
+        </section>
+
+        <section class="output-panel">
+          <div class="panel-header">
+            <h2>2. Workflow</h2>
+            <p class="hint">Step Functions state machine · Kimi K2.5 proposer · IAM Policy Simulator equivalence check · Change Manager two-approver gate</p>
+          </div>
+
+          <div id="refactor-empty" class="result-empty">
+            Pick an SCP and click <strong>Start Refactor</strong> to watch the workflow progress through six steps.
+          </div>
+
+          <div id="refactor-view" class="result-view hidden">
+            <ol class="step-list" id="step-list"></ol>
+
+            <div id="refactor-result" class="hidden">
+              <div class="verdict verdict-success">
+                <div class="verdict-label" id="refactor-terminal-label">Change request created</div>
+                <div class="verdict-scp" id="refactor-terminal-detail">—</div>
+                <div class="verdict-meta" id="refactor-change-id">—</div>
+              </div>
+
+              <div class="section">
+                <div class="section-label">Compression</div>
+                <div class="section-body">
+                  <div class="stat-row">
+                    <div class="stat">
+                      <div class="stat-label">Original</div>
+                      <div class="stat-value" id="stat-original">—</div>
+                    </div>
+                    <div class="stat-arrow">→</div>
+                    <div class="stat">
+                      <div class="stat-label">Compressed</div>
+                      <div class="stat-value" id="stat-compressed">—</div>
+                    </div>
+                    <div class="stat stat-emphasis">
+                      <div class="stat-label">Reduction</div>
+                      <div class="stat-value" id="stat-reduction">—</div>
+                    </div>
+                  </div>
+                  <div class="section-body" id="compression-notes" style="margin-top:10px;">—</div>
+                </div>
+              </div>
+
+              <div class="section">
+                <div class="section-label">Equivalence report</div>
+                <div class="section-body" id="equivalence-summary">—</div>
+              </div>
+
+              <details class="raw-details">
+                <summary>Compressed document</summary>
+                <pre id="compressed-doc"></pre>
+              </details>
+
+              <details class="raw-details">
+                <summary>Raw final output</summary>
+                <pre id="refactor-raw"></pre>
+              </details>
+            </div>
+          </div>
+
+          <div id="refactor-error" class="result-error hidden">
+            <div class="error-label" id="refactor-error-label">Error</div>
+            <div class="error-body" id="refactor-error-message">—</div>
+          </div>
+        </section>
+      </div>
+    </main>
+    <!-- ============================================================= -->
+    <!-- STALE SCP DETECTION VIEW                                       -->
+    <!-- ============================================================= -->
+    <main class="view hidden" id="view-stale">
+      <div class="workspace">
+        <section class="input-panel">
+          <div class="panel-header">
+            <h2>1. Configure scan</h2>
+            <p class="hint">Scan every non-Control-Tower SCP and flag any Deny statement with no CloudTrail activity in the lookback window.</p>
+          </div>
+
+          <label class="scp-id-label" for="stale-lookback-input">Lookback (days)</label>
+          <input id="stale-lookback-input" type="number" min="1" max="365" value="180" />
+
+          <div class="actions">
+            <button id="stale-btn" class="primary">Run Scan</button>
+            <span id="stale-status-inline" class="status-inline"></span>
+          </div>
+        </section>
+
+        <section class="output-panel">
+          <div class="panel-header">
+            <h2>2. Findings</h2>
+            <p class="hint">CloudTrail Lake activity check · shared iam_actions catalog · control-tower guard</p>
+          </div>
+
+          <div id="stale-empty" class="result-empty">
+            Click <strong>Run Scan</strong> to check every SCP Deny statement for zero-activity dead denies.
+          </div>
+
+          <div id="stale-view" class="result-view hidden">
+            <div class="verdict verdict-success">
+              <div class="verdict-label" id="stale-summary-label">Scan complete</div>
+              <div class="verdict-scp" id="stale-summary-count">—</div>
+              <div class="verdict-meta" id="stale-summary-meta">—</div>
+            </div>
+
+            <div id="stale-findings-list"></div>
+
+            <details class="raw-details">
+              <summary>Raw response</summary>
+              <pre id="stale-raw"></pre>
+            </details>
+          </div>
+
+          <div id="stale-error" class="result-error hidden">
+            <div class="error-label">Error</div>
+            <div class="error-body" id="stale-error-message">—</div>
+          </div>
+        </section>
+      </div>
+    </main>
+    <!-- ============================================================= -->
+    <!-- IAM DRIFT DETECTION VIEW (Part 2)                              -->
+    <!-- ============================================================= -->
+    <main class="view hidden" id="view-drift">
+      <div class="workspace">
+        <section class="input-panel">
+          <div class="panel-header">
+            <h2>1. Scan managed roles</h2>
+            <p class="hint">Scan every role tagged ManagedBy=ZeroShift. Drift is any granted action with no CloudTrail activity that Part 1 hasn't marked ACTIVE in the intent registry.</p>
+          </div>
+
+          <label class="scp-id-label" for="drift-lookback-input">Lookback (days)</label>
+          <input id="drift-lookback-input" type="number" min="1" max="365" value="90" />
+
+          <div class="actions">
+            <button id="drift-scan-btn" class="primary">Run Drift Scan</button>
+            <span id="drift-status-inline" class="status-inline"></span>
+          </div>
+
+          <label style="font-size:12px; color:var(--text-muted); margin-top:8px; display:block;">
+            <input type="checkbox" id="drift-use-agent" checked /> 🤖 Autonomous apply (LangGraph + Kimi K2.5)
+          </label>
+
+          <div class="panel-header" style="margin-top:12px;">
+            <h2>Onboard existing roles</h2>
+            <p class="hint">Pull an existing IAM role under ZeroShift management. Applies the ManagedBy tag, attaches the Permissions Boundary, and baselines current permissions into the intent registry.</p>
+          </div>
+          <div class="actions">
+            <button id="onboard-discover-btn" class="primary" style="background:var(--warn);">Discover roles</button>
+          </div>
+          <div id="onboard-list" class="hidden" style="margin-top:8px;"></div>
+        </section>
+
+        <section class="output-panel">
+          <div class="panel-header">
+            <h2>2. Findings</h2>
+            <p class="hint">Kimi K2.5 proposes · Policy Simulator verifies · risk tier chooses the path</p>
+          </div>
+
+          <div id="drift-empty" class="result-empty">
+            Click <strong>Run Drift Scan</strong> to check every managed role for unused permissions and pending removals.
+          </div>
+
+          <div id="drift-view" class="result-view hidden">
+            <div id="drift-summary" class="verdict verdict-success">
+              <div class="verdict-label">Scan complete</div>
+              <div class="verdict-scp" id="drift-summary-count">—</div>
+              <div class="verdict-meta" id="drift-summary-meta">—</div>
+            </div>
+            <div id="drift-role-list"></div>
+            <details class="raw-details">
+              <summary>Raw scan response</summary>
+              <pre id="drift-raw"></pre>
+            </details>
+          </div>
+
+          <div id="drift-remediation" class="result-view hidden" style="margin-top:16px;">
+            <div class="panel-header">
+              <h2>Remediation timeline</h2>
+              <p class="hint" id="drift-remediation-role">—</p>
+            </div>
+            <ol class="step-list" id="drift-step-list"></ol>
+            <div id="drift-remediation-result" class="hidden">
+              <div class="verdict verdict-success">
+                <div class="verdict-label" id="drift-terminal-label">—</div>
+                <div class="verdict-scp" id="drift-terminal-detail">—</div>
+                <div class="verdict-meta" id="drift-terminal-meta">—</div>
+              </div>
+              <details class="raw-details">
+                <summary>Raw final output</summary>
+                <pre id="drift-remediation-raw"></pre>
+              </details>
+            </div>
+
+            <div id="drift-agent-trace-section" class="hidden">
+              <div class="section-label" style="margin-top:12px;">🤖 Agent reasoning trace</div>
+              <ol id="drift-agent-trace" class="step-list"></ol>
+            </div>
+          </div>
+
+          <div id="drift-error" class="result-error hidden">
+            <div class="error-label">Error</div>
+            <div class="error-body" id="drift-error-message">—</div>
+          </div>
+        </section>
+      </div>
+    </main>
+    <!-- ============================================================= -->
+    <!-- CODE ANALYZER VIEW (Part 1)                                    -->
+    <!-- ============================================================= -->
+    <main class="view hidden" id="view-codeanalyzer">
+      <div class="workspace">
+        <section class="input-panel">
+          <div class="panel-header">
+            <h2>1. Paste application source</h2>
+            <p class="hint">Python source (boto3). The analyzer extracts SDK calls and diffs them against the target role's current intent-registry entries.</p>
+          </div>
+
+          <div class="fixture-picker">
+            <button class="code-fixture-btn" data-fixture="news_summarizer">
+              <div class="fixture-name">news_summarizer.py</div>
+              <div class="fixture-desc">S3 · SES · SSM · read+write bucket pattern</div>
+            </button>
+            <button class="code-fixture-btn" data-fixture="analytics_batch">
+              <div class="fixture-name">analytics_batch.py</div>
+              <div class="fixture-desc">Athena · S3 · DynamoDB (resource pattern)</div>
+            </button>
+            <button class="code-fixture-btn" data-fixture="payment_processor">
+              <div class="fixture-name">payment_processor.py</div>
+              <div class="fixture-desc">DynamoDB · KMS · SNS · class attribute pattern</div>
+            </button>
+          </div>
+
+          <textarea id="code-input" spellcheck="false" placeholder="Paste Python source here…" style="min-height:280px; font-family: var(--mono); font-size: 12px;"></textarea>
+
+          <label class="scp-id-label" for="code-target-role">Target role ARN</label>
+          <input id="code-target-role" type="text" spellcheck="false" placeholder="arn:aws:iam::…:role/…" />
+
+          <label class="scp-id-label" for="code-commit-hash">Commit hash (optional)</label>
+          <input id="code-commit-hash" type="text" spellcheck="false" placeholder="abc123" />
+
+          <div class="actions" style="gap:8px; flex-wrap: wrap;">
+            <label style="font-size:12px; color:var(--text-muted);"><input type="checkbox" id="code-apply-check" /> Apply changes to intent registry</label>
+          </div>
+
+          <div class="actions">
+            <button id="code-analyze-btn" class="primary">Analyze code</button>
+            <span id="code-status-inline" class="status-inline"></span>
+          </div>
+
+          <div class="panel-header" style="margin-top:12px;">
+            <h2>Or point at a GitHub URL (stretch)</h2>
+            <p class="hint">Public GitHub file URL (blob or raw). Uses the same target role above.</p>
+          </div>
+          <input id="code-github-url" type="text" spellcheck="false" placeholder="https://github.com/user/repo/blob/main/handler.py" />
+          <div class="actions">
+            <button id="code-github-btn" class="primary" style="background:var(--warn);">Analyze GitHub file</button>
+          </div>
+        </section>
+
+        <section class="output-panel">
+          <div class="panel-header">
+            <h2>2. SDK calls + intent-registry deltas</h2>
+            <p class="hint">Static AST extraction · Kimi K2.5 augmenter · diff against intent registry</p>
+          </div>
+
+          <div id="code-empty" class="result-empty">
+            Paste code and click <strong>Analyze code</strong> to see extracted SDK calls and the intent-registry writes Part 2 will act on.
+          </div>
+
+          <div id="code-view" class="result-view hidden">
+            <div class="verdict verdict-success">
+              <div class="verdict-label">Analysis complete</div>
+              <div class="verdict-scp" id="code-summary-count">—</div>
+              <div class="verdict-meta" id="code-summary-meta">—</div>
+            </div>
+
+            <div class="section">
+              <div class="section-label">Static extraction</div>
+              <div class="section-body">
+                <ul id="code-static-list" class="key-list"></ul>
+              </div>
+            </div>
+
+            <div class="section" id="code-augmenter-section">
+              <div class="section-label">LLM augmenter</div>
+              <div class="section-body" id="code-augmenter-notes">—</div>
+              <ul id="code-augmenter-list" class="key-list"></ul>
+            </div>
+
+            <div class="section">
+              <div class="section-label">Intent-registry delta for <span id="code-delta-role" style="font-family:var(--mono);">—</span></div>
+              <div class="section-body">
+                <div style="margin-top:4px;"><span class="badge" style="background:var(--ok); color:#0b0d12;">ACTIVE add</span></div>
+                <ul id="code-add-list" class="key-list"></ul>
+                <div style="margin-top:8px;"><span class="badge badge-dead-deny">PENDING_REMOVAL</span></div>
+                <ul id="code-remove-list" class="key-list"></ul>
+                <div style="margin-top:8px; color:var(--text-muted); font-size:12px;" id="code-apply-status">—</div>
+              </div>
+            </div>
+
+            <details class="raw-details">
+              <summary>Raw response</summary>
+              <pre id="code-raw"></pre>
+            </details>
+          </div>
+
+          <div id="code-error" class="result-error hidden">
+            <div class="error-label">Error</div>
+            <div class="error-body" id="code-error-message">—</div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <footer class="app-footer">
+    <span>ZeroShift · Part 3</span>
+    <span class="footer-sep">·</span>
+    <span>Model: <code>moonshotai.kimi-k2.5</code></span>
+    <span class="footer-sep">·</span>
+    <span>Region: <code>us-east-1</code></span>
+  </footer>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

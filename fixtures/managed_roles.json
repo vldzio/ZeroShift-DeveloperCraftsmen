@@ -1,0 +1,42 @@
+{
+  "_meta": {
+    "description": "Fixture list of IAM roles ZeroShift Part 2 manages. In fixture mode, the shared iam_role_client resolves these entries; in real mode it queries IAM directly and filters by the ManagedBy=ZeroShift tag. The 'zeroshift-demo-app-role' entry is the CDK-deployed real role that LOW-risk remediation actually mutates.",
+    "environment_values": ["non-prod", "prod-adjacent", "prod"],
+    "sensitive_action_prefixes": ["iam:AssumeRolePolicyUpdate", "iam:CreateAccessKey", "sts:AssumeRole"]
+  },
+  "roles": [
+    {
+      "roleArn": "arn:aws:iam::ACCOUNT:role/zeroshift-demo-app-role",
+      "roleName": "zeroshift-demo-app-role",
+      "environment": "non-prod",
+      "attachedPolicyId": "zeroshift-demo-app-policy",
+      "attachedPolicyArn": "arn:aws:iam::ACCOUNT:policy/zeroshift-demo-app-policy",
+      "isRealRole": true,
+      "description": "CDK-deployed target role. LOW-risk remediation calls iam:CreatePolicyVersion + iam:SetDefaultPolicyVersion against attachedPolicyArn."
+    },
+    {
+      "roleArn": "arn:aws:iam::111111111111:role/analytics-batch-role",
+      "roleName": "analytics-batch-role",
+      "environment": "prod-adjacent",
+      "attachedPolicyId": "analytics-batch-policy",
+      "isRealRole": false,
+      "description": "Fixture-only. Kicks a MEDIUM-tier remediation path (wildcard scope reduction on s3)."
+    },
+    {
+      "roleArn": "arn:aws:iam::111111111111:role/payments-service-role",
+      "roleName": "payments-service-role",
+      "environment": "prod",
+      "attachedPolicyId": "payments-service-policy",
+      "isRealRole": false,
+      "description": "Fixture-only. Kicks HIGH-tier remediation path (prod tag + admin-adjacent removal). Requires human approval."
+    },
+    {
+      "roleArn": "arn:aws:iam::111111111111:role/dev-sandbox-role",
+      "roleName": "dev-sandbox-role",
+      "environment": "non-prod",
+      "attachedPolicyId": "dev-sandbox-policy",
+      "isRealRole": false,
+      "description": "Fixture-only. Non-prod tag, unused-only drift, LOW-tier (fixture no-op apply)."
+    }
+  ]
+}

@@ -1,0 +1,194 @@
+{
+  "Comment": "ZeroShift Part 3 Component 2 - SCP Refactoring workflow. LoadScp -> CheckControlTower -> CheckSize -> ProposeRefactor -> EnumerateActions -> VerifyEquivalence -> CreateChangeRequest.",
+  "StartAt": "LoadScp",
+  "States": {
+    "LoadScp": {
+      "Type": "Task",
+      "Resource": "${RefactorerFunctionArn}",
+      "Parameters": {
+        "task": "load_scp",
+        "scpId.$": "$.scpId"
+      },
+      "ResultPath": "$.loaded",
+      "Next": "CheckControlTower"
+    },
+    "CheckControlTower": {
+      "Type": "Task",
+      "Resource": "${RefactorerFunctionArn}",
+      "Parameters": {
+        "task": "check_control_tower",
+        "scpId.$": "$.loaded.scpId",
+        "scpName.$": "$.loaded.scpName",
+        "controlTowerManaged.$": "$.loaded.controlTowerManaged"
+      },
+      "ResultPath": "$.ctCheck",
+      "Next": "IsControlTowerManaged"
+    },
+    "IsControlTowerManaged": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.ctCheck.shortCircuit",
+          "BooleanEquals": true,
+          "Next": "Skipped_ControlTower"
+        }
+      ],
+      "Default": "CheckSize"
+    },
+    "Skipped_ControlTower": {
+      "Type": "Pass",
+      "Result": {
+        "status": "SKIPPED_CONTROL_TOWER",
+        "reason": "This SCP is managed by AWS Control Tower and must not be modified by ZeroShift."
+      },
+      "End": true
+    },
+    "CheckSize": {
+      "Type": "Task",
+      "Resource": "${RefactorerFunctionArn}",
+      "Parameters": {
+        "task": "check_size",
+        "originalSize.$": "$.loaded.originalSize"
+      },
+      "ResultPath": "$.sizeCheck",
+      "Next": "IsOverThreshold"
+    },
+    "IsOverThreshold": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.sizeCheck.shortCircuit",
+          "BooleanEquals": true,
+          "Next": "Skipped_UnderThreshold"
+        }
+      ],
+      "Default": "ProposeRefactor"
+    },
+    "Skipped_UnderThreshold": {
+      "Type": "Pass",
+      "Result": {
+        "status": "SKIPPED_UNDER_THRESHOLD",
+        "reason": "SCP is under the 8192-byte refactor threshold; no action needed."
+      },
+      "End": true
+    },
+    "ProposeRefactor": {
+      "Type": "Task",
+      "Resource": "${RefactorerFunctionArn}",
+      "Parameters": {
+        "task": "propose_refactor",
+        "scpId.$": "$.loaded.scpId",
+        "scpName.$": "$.loaded.scpName",
+        "document.$": "$.loaded.document"
+      },
+      "ResultPath": "$.proposed",
+      "Next": "VerifyEquivalence"
+    },
+    "VerifyEquivalence": {
+      "Type": "Task",
+      "Resource": "${RefactorerFunctionArn}",
+      "Parameters": {
+        "task": "verify_equivalence",
+        "scpId.$": "$.loaded.scpId",
+        "document.$": "$.loaded.document",
+        "proposal.$": "$.proposed.proposal"
+      },
+      "ResultPath": "$.verification",
+      "Next": "IsEquivalent"
+    },
+    "IsEquivalent": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.verification.equivalence.isEquivalent",
+          "BooleanEquals": false,
+          "Next": "Rejected_NotEquivalent"
+        }
+      ],
+      "Default": "SelectApplyPath"
+    },
+    "Rejected_NotEquivalent": {
+      "Type": "Pass",
+      "Parameters": {
+        "status": "REJECTED_NOT_EQUIVALENT",
+        "reason": "Proposed refactor produces different simulator decisions than the original for at least one action.",
+        "divergences.$": "$.verification.equivalence.divergences"
+      },
+      "End": true
+    },
+    "SelectApplyPath": {
+      "Type": "Choice",
+      "Choices": [
+        {"Variable": "$.useAgent", "BooleanEquals": true, "Next": "AgenticSCPApply"}
+      ],
+      "Default": "CreateChangeRequest"
+    },
+    "AgenticSCPApply": {
+      "Type": "Task",
+      "Resource": "${ScpAgentFunctionArn}",
+      "Parameters": {
+        "scpId.$": "$.loaded.scpId",
+        "scpName.$": "$.loaded.scpName",
+        "originalDocument.$": "$.loaded.document",
+        "proposal.$": "$.proposed.proposal",
+        "equivalence.$": "$.verification.equivalence",
+        "correlationId.$": "$$.Execution.Name"
+      },
+      "ResultPath": "$.agent",
+      "Next": "AgentFallbackCheck"
+    },
+    "AgentFallbackCheck": {
+      "Type": "Choice",
+      "Choices": [
+        {"Variable": "$.agent.fallback", "BooleanEquals": true, "Next": "CreateChangeRequest"}
+      ],
+      "Default": "AgenticSCPAccepted"
+    },
+    "AgenticSCPAccepted": {
+      "Type": "Pass",
+      "Parameters": {
+        "status": "SCP_AGENT_APPLIED",
+        "applyResult.$": "$.agent.applyResult",
+        "proposalSummary": {
+          "originalSize.$": "$.loaded.originalSize",
+          "newSize.$": "$.proposed.proposal.new_size_bytes",
+          "statementsRemovedOrMerged.$": "$.proposed.proposal.statements_removed_or_merged",
+          "mustSplit.$": "$.proposed.proposal.must_split",
+          "compressionNotes.$": "$.proposed.proposal.compression_notes"
+        },
+        "equivalence.$": "$.verification.equivalence"
+      },
+      "End": true
+    },
+    "CreateChangeRequest": {
+      "Type": "Task",
+      "Resource": "${RefactorerFunctionArn}",
+      "Parameters": {
+        "task": "create_change_request",
+        "scpId.$": "$.loaded.scpId",
+        "scpName.$": "$.loaded.scpName",
+        "originalSize.$": "$.loaded.originalSize",
+        "proposal.$": "$.proposed.proposal",
+        "equivalence.$": "$.verification.equivalence"
+      },
+      "ResultPath": "$.changeRequest",
+      "Next": "Accepted"
+    },
+    "Accepted": {
+      "Type": "Pass",
+      "Parameters": {
+        "status": "CHANGE_REQUEST_CREATED",
+        "changeRequest.$": "$.changeRequest.changeRequest",
+        "proposalSummary": {
+          "originalSize.$": "$.loaded.originalSize",
+          "newSize.$": "$.proposed.proposal.new_size_bytes",
+          "statementsRemovedOrMerged.$": "$.proposed.proposal.statements_removed_or_merged",
+          "mustSplit.$": "$.proposed.proposal.must_split",
+          "compressionNotes.$": "$.proposed.proposal.compression_notes"
+        },
+        "equivalence.$": "$.verification.equivalence"
+      },
+      "End": true
+    }
+  }
+}

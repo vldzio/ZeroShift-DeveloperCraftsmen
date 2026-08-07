@@ -1,0 +1,28 @@
+{
+  "eventVersion": "1.09",
+  "eventTime": "2026-08-01T14:22:11Z",
+  "eventSource": "s3.amazonaws.com",
+  "eventName": "PutObject",
+  "awsRegion": "ap-south-1",
+  "sourceIPAddress": "10.0.0.42",
+  "userIdentity": {
+    "type": "AssumedRole",
+    "principalId": "AROAEXAMPLE:developer-session",
+    "arn": "arn:aws:sts::111111111111:assumed-role/DeveloperRole/developer-session",
+    "accountId": "111111111111"
+  },
+  "requestParameters": {
+    "bucketName": "prod-app-1-artifacts-mumbai",
+    "key": "reports/2026-08-01.json"
+  },
+  "resources": [
+    {
+      "ARN": "arn:aws:s3:::prod-app-1-artifacts-mumbai/reports/2026-08-01.json",
+      "type": "AWS::S3::Object"
+    }
+  ],
+  "errorCode": "AccessDenied",
+  "errorMessage": "User: arn:aws:sts::111111111111:assumed-role/DeveloperRole/developer-session is not authorized to perform: s3:PutObject on resource: arn:aws:s3:::prod-app-1-artifacts-mumbai/reports/2026-08-01.json with an explicit deny in a service control policy",
+  "recipientAccountId": "111111111111",
+  "eventID": "evt-fixture-region-deny-001"
+}

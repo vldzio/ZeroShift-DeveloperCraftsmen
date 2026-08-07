@@ -1,0 +1,28 @@
+{
+  "eventVersion": "1.09",
+  "eventTime": "2026-08-01T16:11:07Z",
+  "eventSource": "iam.amazonaws.com",
+  "eventName": "AttachRolePolicy",
+  "awsRegion": "us-east-1",
+  "sourceIPAddress": "10.0.0.42",
+  "userIdentity": {
+    "type": "AssumedRole",
+    "principalId": "AROAEXAMPLE:platformadmin-session",
+    "arn": "arn:aws:sts::111111111111:assumed-role/PlatformAdminRole/platformadmin-session",
+    "accountId": "111111111111"
+  },
+  "requestParameters": {
+    "roleName": "AppServiceRole",
+    "policyArn": "arn:aws:iam::aws:policy/AdministratorAccess"
+  },
+  "resources": [
+    {
+      "ARN": "arn:aws:iam::111111111111:role/AppServiceRole",
+      "type": "AWS::IAM::Role"
+    }
+  ],
+  "errorCode": "AccessDenied",
+  "errorMessage": "User: arn:aws:sts::111111111111:assumed-role/PlatformAdminRole/platformadmin-session is not authorized to perform: iam:AttachRolePolicy on resource: arn:aws:iam::111111111111:role/AppServiceRole with an explicit deny in a service control policy",
+  "recipientAccountId": "111111111111",
+  "eventID": "evt-fixture-iam-wildcard-deny-003"
+}

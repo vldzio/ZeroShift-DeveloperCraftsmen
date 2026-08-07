@@ -1,0 +1,30 @@
+{
+  "policyId": "p-root-deny-expensive",
+  "name": "DenyExpensiveInstances",
+  "controlTowerManaged": false,
+  "awsManaged": false,
+  "document": {
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Sid": "DenyLargeInstanceTypes",
+        "Effect": "Deny",
+        "Action": [
+          "ec2:RunInstances"
+        ],
+        "Resource": "arn:aws:ec2:*:*:instance/*",
+        "Condition": {
+          "StringLike": {
+            "ec2:InstanceType": [
+              "*.24xlarge",
+              "*.32xlarge",
+              "*.48xlarge",
+              "p4d.*",
+              "p5.*"
+            ]
+          }
+        }
+      }
+    ]
+  }
+}

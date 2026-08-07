@@ -1,0 +1,55 @@
+{
+  "id": "r-zeroshiftroot",
+  "type": "ROOT",
+  "name": "Root",
+  "scps": [
+    "p-root-deny-expensive",
+    "p-aws-guardrails-deny-root-user"
+  ],
+  "children": [
+    {
+      "id": "ou-production-abc123",
+      "type": "ORGANIZATIONAL_UNIT",
+      "name": "Production",
+      "scps": [
+        "p-prod-deny-regions"
+      ],
+      "children": [
+        {
+          "id": "111111111111",
+          "type": "ACCOUNT",
+          "name": "prod-app-1",
+          "scps": [
+            "p-account-deny-iam-wildcards"
+          ]
+        },
+        {
+          "id": "222222222222",
+          "type": "ACCOUNT",
+          "name": "prod-app-2",
+          "scps": []
+        }
+      ]
+    },
+    {
+      "id": "ou-sandbox-def456",
+      "type": "ORGANIZATIONAL_UNIT",
+      "name": "Sandbox",
+      "scps": [],
+      "children": [
+        {
+          "id": "333333333333",
+          "type": "ACCOUNT",
+          "name": "sandbox-1",
+          "scps": []
+        },
+        {
+          "id": "444444444444",
+          "type": "ACCOUNT",
+          "name": "sandbox-2",
+          "scps": []
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "_meta": {
+    "description": "Seed rows for the zeroshift-intent-registry DynamoDB table. Demonstrates the Part 1 <-> Part 2 feedback loop without Part 1 being built yet. Written via `make seed-intent-registry`.",
+    "notes": [
+      "Row 1 (ACTIVE recent addition): permission that CloudTrail shows zero usage for, but was added by Part 1 in a recent commit. Part 2 must NOT flag it.",
+      "Row 2 (expired PENDING_REMOVAL): a permission Part 1 marked for removal 100 days ago. Part 2 should execute the removal.",
+      "Row 3 (active PENDING_REMOVAL): grace period still running (expires in 30 days). Part 2 must preserve until grace expires."
+    ]
+  },
+  "entries": [
+    {
+      "roleArn": "arn:aws:iam::ACCOUNT:role/zeroshift-demo-app-role",
+      "permission#version": "logs:PutLogEvents#1",
+      "permission": "logs:PutLogEvents",
+      "resource": "*",
+      "status": "ACTIVE",
+      "addedAtCommit": "recent-abc123",
+      "gracePeriodExpiry": null,
+      "riskScore": "LOW",
+      "source": "PART1_CODE_ANALYSIS",
+      "lastUpdated": "2026-08-01T12:00:00Z"
+    },
+    {
+      "roleArn": "arn:aws:iam::111111111111:role/dev-sandbox-role",
+      "permission#version": "lambda:InvokeFunction#1",
+      "permission": "lambda:InvokeFunction",
+      "resource": "*",
+      "status": "PENDING_REMOVAL",
+      "addedAtCommit": "old-def456",
+      "removedAtCommit": "recent-ghi789",
+      "gracePeriodExpiry": "2026-05-01T00:00:00Z",
+      "riskScore": "LOW",
+      "source": "PART1_CODE_ANALYSIS",
+      "lastUpdated": "2026-04-15T09:00:00Z"
+    },
+    {
+      "roleArn": "arn:aws:iam::111111111111:role/analytics-batch-role",
+      "permission#version": "athena:StopQueryExecution#1",
+      "permission": "athena:StopQueryExecution",
+      "resource": "*",
+      "status": "PENDING_REMOVAL",
+      "addedAtCommit": "recent-jkl012",
+      "removedAtCommit": "recent-mno345",
+      "gracePeriodExpiry": "2027-01-01T00:00:00Z",
+      "riskScore": "MEDIUM",
+      "source": "PART1_CODE_ANALYSIS",
+      "lastUpdated": "2026-08-01T14:00:00Z"
+    }
+  ]
+}

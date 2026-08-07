@@ -1,0 +1,27 @@
+{
+  "policyId": "p-account-deny-iam-wildcards",
+  "name": "DenyIAMWildcards",
+  "controlTowerManaged": false,
+  "awsManaged": false,
+  "document": {
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Sid": "DenyIAMWildcardAttachments",
+        "Effect": "Deny",
+        "Action": [
+          "iam:AttachRolePolicy",
+          "iam:PutRolePolicy",
+          "iam:AttachUserPolicy",
+          "iam:PutUserPolicy"
+        ],
+        "Resource": "*",
+        "Condition": {
+          "StringEquals": {
+            "iam:PolicyARN": "arn:aws:iam::aws:policy/AdministratorAccess"
+          }
+        }
+      }
+    ]
+  }
+}

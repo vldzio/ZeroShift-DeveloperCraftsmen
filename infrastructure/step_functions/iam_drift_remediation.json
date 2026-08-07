@@ -1,0 +1,233 @@
+{
+  "Comment": "ZeroShift Part 2 - IAM Drift Remediation. LoadRole -> CheckManaged -> ScanUsage -> ReadIntentRegistry -> ProposeReplacement -> SimulateEquivalence -> ScoreRisk -> RiskGate (LOW auto / MEDIUM wait / HIGH approval) -> ApplyPolicy -> UpdateIntentRegistry.",
+  "StartAt": "LoadRole",
+  "States": {
+    "LoadRole": {
+      "Type": "Task",
+      "Resource": "${RemediatorFunctionArn}",
+      "Parameters": {
+        "task": "load_role",
+        "roleArn.$": "$.roleArn"
+      },
+      "ResultPath": "$.loaded",
+      "Next": "CheckManaged"
+    },
+    "CheckManaged": {
+      "Type": "Task",
+      "Resource": "${RemediatorFunctionArn}",
+      "Parameters": {
+        "task": "check_managed",
+        "tags.$": "$.loaded.tags"
+      },
+      "ResultPath": "$.managed",
+      "Next": "IsManaged"
+    },
+    "IsManaged": {
+      "Type": "Choice",
+      "Choices": [
+        {"Variable": "$.managed.shortCircuit", "BooleanEquals": true, "Next": "Skipped_NotManaged"}
+      ],
+      "Default": "ScanUsage"
+    },
+    "Skipped_NotManaged": {
+      "Type": "Pass",
+      "Result": {"status": "SKIPPED_NOT_MANAGED", "reason": "Role does not carry the ManagedBy=ZeroShift tag."},
+      "End": true
+    },
+    "ScanUsage": {
+      "Type": "Task",
+      "Resource": "${RemediatorFunctionArn}",
+      "Parameters": {
+        "task": "scan_usage",
+        "roleArn.$": "$.loaded.roleArn"
+      },
+      "ResultPath": "$.usage",
+      "Next": "ReadIntentRegistry"
+    },
+    "ReadIntentRegistry": {
+      "Type": "Task",
+      "Resource": "${RemediatorFunctionArn}",
+      "Parameters": {
+        "task": "read_intent_registry",
+        "roleArn.$": "$.loaded.roleArn"
+      },
+      "ResultPath": "$.intent",
+      "Next": "HasDrift"
+    },
+    "HasDrift": {
+      "Type": "Choice",
+      "Choices": [
+        {"Variable": "$.usage.actionsToRemove[0]", "IsPresent": true, "Next": "ProposeReplacement"}
+      ],
+      "Default": "NoDrift"
+    },
+    "NoDrift": {
+      "Type": "Pass",
+      "Result": {"status": "NO_DRIFT", "reason": "Every attached action has recent CloudTrail activity or intent-registry ACTIVE status."},
+      "End": true
+    },
+    "ProposeReplacement": {
+      "Type": "Task",
+      "Resource": "${RemediatorFunctionArn}",
+      "Parameters": {
+        "task": "propose_replacement",
+        "roleArn.$": "$.loaded.roleArn",
+        "originalPolicy.$": "$.loaded.originalPolicy",
+        "actionsToRemove.$": "$.usage.actionsToRemove"
+      },
+      "ResultPath": "$.proposed",
+      "Next": "SimulateEquivalence"
+    },
+    "SimulateEquivalence": {
+      "Type": "Task",
+      "Resource": "${RemediatorFunctionArn}",
+      "Parameters": {
+        "task": "simulate_equivalence",
+        "originalPolicy.$": "$.loaded.originalPolicy",
+        "proposal.$": "$.proposed.proposal",
+        "actionsToRemove.$": "$.usage.actionsToRemove"
+      },
+      "ResultPath": "$.verified",
+      "Next": "IsEquivalent"
+    },
+    "IsEquivalent": {
+      "Type": "Choice",
+      "Choices": [
+        {"Variable": "$.verified.equivalence.isEquivalent", "BooleanEquals": false, "Next": "Rejected_NotEquivalent"}
+      ],
+      "Default": "ScoreRisk"
+    },
+    "Rejected_NotEquivalent": {
+      "Type": "Pass",
+      "Parameters": {
+        "status": "REJECTED_NOT_EQUIVALENT",
+        "reason": "Proposed policy removed or added actions that the caller did not request.",
+        "divergences.$": "$.verified.equivalence.divergences"
+      },
+      "End": true
+    },
+    "ScoreRisk": {
+      "Type": "Task",
+      "Resource": "${RemediatorFunctionArn}",
+      "Parameters": {
+        "task": "score_risk",
+        "environment.$": "$.loaded.environment",
+        "actionsToRemove.$": "$.usage.actionsToRemove"
+      },
+      "ResultPath": "$.risk",
+      "Next": "RiskGate"
+    },
+    "RiskGate": {
+      "Type": "Choice",
+      "Choices": [
+        {"Variable": "$.risk.riskTier", "StringEquals": "LOW", "Next": "SelectApplyPath"},
+        {"Variable": "$.risk.riskTier", "StringEquals": "MEDIUM", "Next": "WaitGracePeriod"},
+        {"Variable": "$.risk.riskTier", "StringEquals": "HIGH", "Next": "RequireApproval"}
+      ],
+      "Default": "RequireApproval"
+    },
+    "WaitGracePeriod": {
+      "Type": "Wait",
+      "SecondsPath": "$.gracePeriodSecondsOverride",
+      "Next": "SelectApplyPath"
+    },
+    "SelectApplyPath": {
+      "Type": "Choice",
+      "Choices": [
+        {"Variable": "$.useAgent", "BooleanEquals": true, "Next": "AgenticApply"}
+      ],
+      "Default": "DeterministicApply"
+    },
+    "AgenticApply": {
+      "Type": "Task",
+      "Resource": "${IamAgentFunctionArn}",
+      "Parameters": {
+        "roleArn.$": "$.loaded.roleArn",
+        "attachedPolicyArn.$": "$.loaded.attachedPolicyArn",
+        "originalPolicy.$": "$.loaded.originalPolicy",
+        "proposal.$": "$.proposed.proposal",
+        "actionsToRemove.$": "$.usage.actionsToRemove",
+        "riskTier.$": "$.risk.riskTier",
+        "correlationId.$": "$$.Execution.Name"
+      },
+      "ResultPath": "$.agent",
+      "Next": "AgentFallbackCheck"
+    },
+    "AgentFallbackCheck": {
+      "Type": "Choice",
+      "Choices": [
+        {"Variable": "$.agent.fallback", "BooleanEquals": true, "Next": "DeterministicApply"}
+      ],
+      "Default": "AgenticSuccess"
+    },
+    "AgenticSuccess": {
+      "Type": "Pass",
+      "Parameters": {
+        "applyResult.$": "$.agent.applyResult",
+        "reason": "agentic"
+      },
+      "ResultPath": "$.applied",
+      "Next": "UpdateIntentRegistry"
+    },
+    "DeterministicApply": {
+      "Type": "Task",
+      "Resource": "${RemediatorFunctionArn}",
+      "Parameters": {
+        "task": "apply_policy",
+        "roleArn.$": "$.loaded.roleArn",
+        "proposal.$": "$.proposed.proposal"
+      },
+      "ResultPath": "$.applied",
+      "Next": "UpdateIntentRegistry"
+    },
+    "UpdateIntentRegistry": {
+      "Type": "Task",
+      "Resource": "${RemediatorFunctionArn}",
+      "Parameters": {
+        "task": "update_intent_registry",
+        "roleArn.$": "$.loaded.roleArn",
+        "actionsToRemove.$": "$.usage.actionsToRemove",
+        "riskTier.$": "$.risk.riskTier",
+        "applyResult.$": "$.applied.applyResult"
+      },
+      "ResultPath": "$.registry",
+      "Next": "Done"
+    },
+    "RequireApproval": {
+      "Type": "Task",
+      "Resource": "${RemediatorFunctionArn}",
+      "Parameters": {
+        "task": "record_approval_required",
+        "roleArn.$": "$.loaded.roleArn",
+        "actionsToRemove.$": "$.usage.actionsToRemove",
+        "riskTier.$": "$.risk.riskTier"
+      },
+      "ResultPath": "$.approval",
+      "Next": "Approval_Required_Terminal"
+    },
+    "Approval_Required_Terminal": {
+      "Type": "Pass",
+      "Parameters": {
+        "status": "APPROVAL_REQUIRED",
+        "reason": "HIGH-tier drift proposal recorded; safe-mode v1 does not auto-apply. Two-approver Change Manager workflow is deferred.",
+        "riskTier.$": "$.risk.riskTier",
+        "actionsToRemove.$": "$.usage.actionsToRemove"
+      },
+      "End": true
+    },
+    "Done": {
+      "Type": "Pass",
+      "Parameters": {
+        "status": "REMEDIATION_APPLIED",
+        "riskTier.$": "$.risk.riskTier",
+        "actionsRemoved.$": "$.usage.actionsToRemove",
+        "applyResult.$": "$.applied.applyResult",
+        "proposalSummary": {
+          "rationale.$": "$.proposed.proposal.rationale",
+          "removedActions.$": "$.proposed.proposal.removed_actions"
+        }
+      },
+      "End": true
+    }
+  }
+}
