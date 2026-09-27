@@ -2,8 +2,6 @@
 
 **A team-built AWS Agentic AI Hackathon project exploring how AI agents can propose, inspect, and verify changes to IAM policies and AWS Organizations service control policies.** ZeroShift combines Python AWS Lambdas, Step Functions, CDK infrastructure, Amazon Bedrock, and two LangGraph agents with a five-tab browser interface. The repository includes local fixture data so its workflows can be explored without a live AWS Organization.
 
-> **Project context:** Developer Craftsmen team project. The repository currently labels its license “Internal — Developer Craftsmen team.” Confirm the team's permission before redistributing or featuring its code as an individual portfolio project, and retain team attribution.
-
 ## What the system covers
 
 | Area | Implemented approach | Where to look |
