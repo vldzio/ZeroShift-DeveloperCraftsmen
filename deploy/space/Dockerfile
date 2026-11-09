@@ -21,7 +21,7 @@ RUN git clone --depth 1 --branch "${REF}" "${REPO}" /srv/app \
  && chown -R node:node /srv/app
 
 COPY start.sh /srv/start.sh
-RUN sed -i 's/$//' /srv/start.sh && chmod 755 /srv/start.sh
+RUN tr -d '' < /srv/start.sh > /tmp/start.sh && install -m 755 /tmp/start.sh /srv/start.sh && rm /tmp/start.sh
 
 USER node
 ENV HOME=/home/node \
