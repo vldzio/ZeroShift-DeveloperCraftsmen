@@ -20,7 +20,8 @@ RUN git clone --depth 1 --branch "${REF}" "${REPO}" /srv/app \
  && /opt/venv/bin/pip install --no-cache-dir -r /srv/app/demo_api/requirements.txt \
  && chown -R node:node /srv/app
 
-COPY --chmod=755 start.sh /srv/start.sh
+COPY start.sh /srv/start.sh
+RUN sed -i 's/$//' /srv/start.sh && chmod 755 /srv/start.sh
 
 USER node
 ENV HOME=/home/node \
