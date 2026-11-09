@@ -84,8 +84,10 @@ _executions: dict[str, Execution] = {}
 
 
 def _client_ip(req: Request) -> str:
+    # The platform proxy appends the real client IP as the LAST entry; earlier entries are client-supplied
+    # and spoofable, so never use them for rate limiting.
     fwd = req.headers.get("x-forwarded-for")
-    return fwd.split(",")[0].strip() if fwd else (req.client.host if req.client else "unknown")
+    return fwd.split(",")[-1].strip() if fwd else (req.client.host if req.client else "unknown")
 
 
 def _admit(req: Request) -> JSONResponse | None:
