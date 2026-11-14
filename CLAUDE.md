@@ -42,3 +42,21 @@ Repository conventions (see `README.md` for full detail):
 - `lambdas/` is the Lambda deployment root — imports use `from shared.*` and `from part3.*`, not `from lambdas.shared.*`. `tests/conftest.py` adds `lambdas/` to `sys.path` so tests run with the same import paths.
 - `fixtures/` is the canonical fixture source. `make package-lambda` copies it into the deploy bundle; `make serve-frontend` copies denial events into `frontend/fixtures/`.
 - Any change touching the LLM invocation path (`llm_client.py`) or Bedrock IAM (`part3_stack.py`) must be re-verified with `make test` (25 tests should pass) plus `cd infrastructure && python app.py` (CDK synth should exit 0).
+
+## Demo deployment (branch `demo-ready`)
+
+The console is hosted as a live demo that runs the REAL Lambda handlers on bundled fixtures (no AWS account):
+
+```text
+Browser (Vercel, `frontend/`) -> Hugging Face Space `demo_api/` (limits, BYO key, LangSmith)
+   -> real handlers in `lambdas/` + `demo_api/sfn_emulator.py` (runs `infrastructure/step_functions/*.json`) + moto sandbox (`demo_api/sandbox.py`)
+   -> private FreeLLMAPI gateway (127.0.0.1:3001, same container) -> free-tier LLMs
+```
+
+- LLM seam: `lambdas/shared/llm_client.py` has an `openai-compatible` provider (`lambdas/shared/openai_compat.py`, auto-selected when `LLM_BASE_URL` is set; JSON-schema validated with one retry). LangGraph agents use `agents/common/bedrock_client.py` -> `ChatOpenAI` in that mode. Per-request BYO key lives in `lambdas/shared/llm_context.py`. Default Bedrock behaviour is unchanged.
+- API: `demo_api/app.py` (FastAPI, routes mirror API Gateway), `guard.py` (Upstash per-IP/global limits, BYO-key host allow-list), `gateway.py` (reads the gateway's unified key from its local SQLite DB). Client IP = LAST `X-Forwarded-For` entry.
+- Frontend: `frontend/llm-settings.js` (banner + "LLM key" panel, key in sessionStorage), `vercel.json` build runs `scripts/sync_frontend_fixtures.py` and `scripts/write_frontend_config.py` (env `ZEROSHIFT_API_URL`).
+- Space recipe: `deploy/space/`. Space `zeroshift-demo-api`, LangSmith project `zeroshift-demo`. Secrets: `ENCRYPTION_KEY` (64 hex), `FREEAPI_CONFIG_JSON`, `LANGSMITH_API_KEY`, `UPSTASH_REDIS_REST_URL/TOKEN`; optional `CORS_ORIGINS`, `RL_PER_IP_DAILY`, `RL_GLOBAL_DAILY`. The Space clones branch `demo-ready`.
+- Steps: `hf auth login`, `vercel login`, create the Space from `deploy/space/`, set secrets, then `vercel deploy --prod --yes --build-env ZEROSHIFT_API_URL=<space url>` from the repo root.
+- Tests: `make test` (105 pass: 92 original + 13 new). Never hard-code LLM output. Many repo files use CRLF; preserve line endings.
+- Status: NOT verified - Space Docker build, real provider calls (esp. LangGraph tool use on free models), live deploy.

@@ -2,6 +2,24 @@
 
 **A team-built AWS Agentic AI Hackathon project exploring how AI agents can propose, inspect, and verify changes to IAM policies and AWS Organizations service control policies.** ZeroShift combines Python AWS Lambdas, Step Functions, CDK infrastructure, Amazon Bedrock, and two LangGraph agents with a five-tab browser interface. The repository includes local fixture data so its workflows can be explored without a live AWS Organization.
 
+## Live demo
+
+The console runs online against the **real Lambda handlers** (fixture mode, no AWS account) via `demo_api/`, a FastAPI adapter:
+
+```text
+Browser (Vercel, frontend/) ──► Hugging Face Space (one container)
+                                  ├─ demo_api (public :7860): per-IP + global daily limits, BYO key, CORS
+                                  │    ├─ real Lambdas + Step Functions emulator (runs infrastructure/step_functions/*.json)
+                                  │    └─ moto sandbox for DynamoDB / SNS / IAM
+                                  └─ FreeLLMAPI gateway (private, 127.0.0.1:3001) ──► free-tier LLM providers
+                                  every LLM call ──► LangSmith project "zeroshift-demo"
+```
+
+* No LLM output is hard-coded: explanations, SCP compressions, policy rationales and code-intent suggestions come from the gateway's models (`shared/openai_compat.py`, schema-validated with one retry). If the free pool is exhausted the UI says so.
+* Visitors get a small daily allowance; **LLM key** in the header lets them bring their own OpenAI-compatible key (kept in the tab, never logged).
+* Deploy recipe: [`deploy/space/`](deploy/space) (Space) and [`vercel.json`](vercel.json) (frontend; set `ZEROSHIFT_API_URL`).
+* Run it locally: `pip install -r demo_api/requirements.txt && LLM_BASE_URL=... LLM_API_KEY=... uvicorn demo_api.app:app --port 8130`, then `make serve-frontend` and open `index.html?api=http://localhost:8130`.
+
 ## What the system covers
 
 | Area | Implemented approach | Where to look |
