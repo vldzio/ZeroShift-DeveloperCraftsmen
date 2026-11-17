@@ -84,8 +84,15 @@ _executions: dict[str, Execution] = {}
 
 
 def _client_ip(req: Request) -> str:
-    # The platform proxy appends the real client IP as the LAST entry; earlier entries are client-supplied
-    # and spoofable, so never use them for rate limiting.
+    # Behind Cloudflare (Render) the last X-Forwarded-For entry is a shared edge IP, so every visitor would
+    # share one limit. Cloudflare overwrites CF-Connecting-IP (forged values are rejected), so trust it
+    # only when TRUST_CF_CONNECTING_IP=true.
+    if os.environ.get("TRUST_CF_CONNECTING_IP", "").lower() == "true":
+        cf = req.headers.get("cf-connecting-ip")
+        if cf:
+            return cf.strip()
+    # Otherwise the platform proxy appends the real client IP as the LAST entry; earlier entries are
+    # client-supplied and spoofable, so never use them for rate limiting.
     fwd = req.headers.get("x-forwarded-for")
     return fwd.split(",")[-1].strip() if fwd else (req.client.host if req.client else "unknown")
 
