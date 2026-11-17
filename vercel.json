@@ -1,0 +1,7 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "echo skip",
+  "buildCommand": "python3 scripts/sync_frontend_fixtures.py && python3 scripts/write_frontend_config.py",
+  "outputDirectory": "frontend"
+}

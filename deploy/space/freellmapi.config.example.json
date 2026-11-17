@@ -1,0 +1,9 @@
+{
+  "admin": { "email": "demo-admin@example.invalid", "password": "CHANGE-ME-min-8-chars" },
+  "keys": [
+    { "platform": "groq", "key": "gsk_REPLACE_ME", "label": "groq-main" },
+    { "platform": "google", "key": "AIzaREPLACE_ME", "label": "gemini-main" },
+    { "platform": "openrouter", "key": "sk-or-REPLACE_ME", "label": "openrouter-main" }
+  ],
+  "routing": { "strategy": "balanced" }
+}

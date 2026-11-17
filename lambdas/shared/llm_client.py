@@ -6,6 +6,11 @@ Supported providers (selected via the ``LLM_PROVIDER`` environment variable):
   the provider-neutral Converse API (``bedrock-runtime:Converse``).
   Authentication via the Lambda IAM role. No API key required.
   Default model: Moonshot AI Kimi K2.5 (``moonshotai.kimi-k2.5``).
+- ``openai-compatible``: any OpenAI-compatible ``/v1`` endpoint, e.g. a
+  self-hosted FreeLLMAPI gateway. Set ``LLM_BASE_URL`` and ``LLM_API_KEY``
+  (and optionally ``LLM_MODEL_ID``, default ``auto``). Selected automatically
+  when ``LLM_BASE_URL`` is set and ``LLM_PROVIDER`` is not. Calls are traced to
+  LangSmith when ``LANGSMITH_TRACING=true`` and ``LANGSMITH_API_KEY`` is set.
 - ``moonshot-direct``: Moonshot AI's own API. Reads credentials from AWS
   Secrets Manager secret ``zeroshift/llm-credentials``. Not implemented at v1.
 - ``openai-direct``: OpenAI's Responses API at ``https://api.openai.com``.
@@ -53,11 +58,17 @@ class LlmResponse:
 
 
 def _provider() -> str:
-    return os.environ.get(PROVIDER_ENV, DEFAULT_PROVIDER).lower()
+    explicit = os.environ.get(PROVIDER_ENV)
+    if explicit:
+        return explicit.lower()
+    if os.environ.get("LLM_BASE_URL"):
+        return "openai-compatible"
+    return DEFAULT_PROVIDER
 
 
 def _model_id() -> str:
-    return os.environ.get(MODEL_ID_ENV, DEFAULT_MODEL_ID_PLACEHOLDER)
+    default = "auto" if _provider() == "openai-compatible" else DEFAULT_MODEL_ID_PLACEHOLDER
+    return os.environ.get(MODEL_ID_ENV, default)
 
 
 @lru_cache(maxsize=1)
@@ -112,6 +123,18 @@ def invoke_structured(
             model_id=model_id,
         )
         output = _extract_converse_output(raw, tool_name=schema_name)
+    elif provider == "openai-compatible":
+        from .openai_compat import invoke_json
+
+        output, raw = invoke_json(
+            prompt=prompt,
+            response_schema=response_schema,
+            schema_name=schema_name,
+            system_prompt=system_prompt,
+            temperature=temperature,
+            max_output_tokens=max_output_tokens,
+            model_id=model_id,
+        )
     elif provider == "moonshot-direct":
         raw = _invoke_moonshot_direct(model_id=model_id)
         output = _extract_direct_json_output(raw)

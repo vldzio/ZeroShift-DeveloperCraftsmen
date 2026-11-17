@@ -1,0 +1,10 @@
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30,<1
+httpx>=0.27,<1
+openai>=1.50,<3
+langsmith>=0.2,<1
+langchain-openai>=0.2,<1
+langgraph>=0.2,<1
+jsonschema>=4.23,<5
+boto3>=1.35,<2
+moto[iam,organizations,sns,dynamodb]>=5.0,<6
