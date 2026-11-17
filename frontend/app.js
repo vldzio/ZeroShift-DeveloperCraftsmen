@@ -18,6 +18,20 @@
     return apiUrlEl.value.trim().replace(/\/+$/, "");
   }
 
+  // Turn "HTTP 429: {\"error\": \"...\"}" into the API's own sentence, and add a next step for the common cases.
+  function friendlyError(msg) {
+    const m = /^HTTP (\d{3}): ([\s\S]*)$/.exec(String(msg || ""));
+    if (!m) {
+      if (/Failed to fetch|NetworkError|Load failed/i.test(msg)) return msg + " — the API could not be reached. A sleeping demo API takes about a minute to wake; try again shortly.";
+      return msg;
+    }
+    let text = m[2];
+    try { const j = JSON.parse(text); text = j.error || j.message || j.detail || text; } catch (_) { /* not JSON: keep the raw body */ }
+    if (m[1] === "429" && !/key/i.test(text)) text += " Add your own key under “LLM key” (top right) or try again tomorrow.";
+    if (m[1] >= "500" && m[1] < "600") text = "The API returned an error (" + m[1] + "): " + text + " Try again in a moment.";
+    return text;
+  }
+
   // ---------- Shared: which model backs the LLM steps ----------
   // Defaults describe the AWS (Bedrock) deployment. A hosted demo API reports the model it really uses
   // from its root endpoint (`llm.name` / `llm.label`), so the labels are never hard-coded to the wrong one.
@@ -28,11 +42,21 @@
     document.querySelectorAll("[data-llm]").forEach((el) => { el.textContent = LLM[el.dataset.llm] || el.textContent; });
   }
 
+  // Header chip: honest connection state (the free hosted API sleeps when idle and needs about a minute to wake).
+  const apiStateEl = document.getElementById("api-state");
+  function setApiState(kind, text) {
+    if (!apiStateEl) return;
+    apiStateEl.className = "api-state" + (kind ? " api-state-" + kind : "");
+    apiStateEl.textContent = text;
+  }
+
   async function loadLlmInfo() {
     const apiUrl = getApiUrl();
-    if (!apiUrl) return;
+    if (!apiUrl) { setApiState("idle", "No API set"); return; }
+    setApiState("wait", "Connecting…");
     try {
       const resp = await fetch(`${apiUrl}/`);
+      setApiState("ok", "API reachable");
       if (!resp.ok) return;
       const info = (await resp.json()).llm;
       if (info && info.name) {
@@ -40,7 +64,9 @@
         LLM.nameOn = info.label || info.name;
         applyLlmLabels();
       }
-    } catch (_) { /* no root endpoint (API Gateway) or offline: keep the defaults */ }
+    } catch (_) {  // offline or still waking: keep the default labels
+      setApiState("warn", "API not reachable yet (a sleeping demo API takes about a minute to wake)");
+    }
   }
   loadLlmInfo();
   apiUrlEl.addEventListener("change", loadLlmInfo);
@@ -65,8 +91,8 @@
         else el.classList.add("hidden");
       });
       buttons.forEach((b) => {
-        if (b.dataset.view === view) b.classList.add("active");
-        else b.classList.remove("active");
+        if (b.dataset.view === view) { b.classList.add("active"); b.setAttribute("aria-current", "page"); }
+        else { b.classList.remove("active"); b.removeAttribute("aria-current"); }
       });
       localStorage.setItem("zeroshift.activeView", view);
     }
@@ -156,7 +182,7 @@
 
     function setBusy(busy) {
       els.analyzeBtn.disabled = busy;
-      els.analyzeStatus.textContent = busy ? "Analyzing…" : "";
+      els.analyzeStatus.textContent = busy ? "Analyzing… free models can take up to a minute" : "";
     }
     function hideAll() {
       els.resultEmpty.classList.add("hidden");
@@ -165,7 +191,7 @@
     }
     function showError(msg) {
       hideAll();
-      els.errorMessage.textContent = msg;
+      els.errorMessage.textContent = friendlyError(msg);
       els.resultError.classList.remove("hidden");
     }
 
@@ -284,6 +310,13 @@
     });
 
     els.startBtn.addEventListener("click", start);
+    document.getElementById("refactor-stop-btn")?.addEventListener("click", () => {
+      // Client-side only: stops polling; the server-side workflow keeps running and is not cancelled.
+      stopPolling();
+      setBusy(false);
+      els.statusInline.dataset.idle = "1";
+      els.statusInline.textContent = "Stopped watching. The workflow may still finish on the server; press Start Refactor to check again.";
+    });
 
     async function start() {
       const apiUrl = getApiUrl();
@@ -332,7 +365,7 @@
           if (Date.now() - pollStart > POLL_TIMEOUT_MS) {
             stopPolling();
             setBusy(false);
-            showError("Polling timed out after 5 minutes.");
+            showError("Stopped waiting after 6 minutes without a final status. The workflow may still be running on the server; try again in a moment.");
             return;
           }
         } catch (err) {
@@ -372,7 +405,7 @@
 
     function stepDetail(name, s, body) {
       if (s.status === "PENDING") return "waiting";
-      if (s.status === "RUNNING") return "in progress…";
+      if (s.status === "RUNNING") return pollStart ? `in progress · ${Math.round((Date.now() - pollStart) / 1000)} s elapsed` : "in progress…";
       if (s.status === "SKIPPED") return "skipped";
       const out = s.output || {};
       if (name === "LoadScp" && out.originalSize) return `loaded · ${out.originalSize.toLocaleString()} bytes`;
@@ -459,7 +492,10 @@
 
     function setBusy(busy) {
       els.startBtn.disabled = busy;
-      els.statusInline.textContent = busy ? "Running workflow…" : "";
+      els.statusInline.textContent = busy ? "Running workflow… the AI steps can take a few minutes on free models" : "";
+      const stopBtn = document.getElementById("refactor-stop-btn");
+      if (stopBtn) stopBtn.hidden = !busy;
+      delete els.statusInline.dataset.idle;
     }
     function hideAll() {
       els.empty.classList.add("hidden");
@@ -468,7 +504,7 @@
     function showError(msg) {
       hideAll();
       els.errLabel.textContent = "Error";
-      els.errMsg.textContent = msg;
+      els.errMsg.textContent = friendlyError(msg);
       els.err.classList.remove("hidden");
     }
   })();
@@ -579,7 +615,7 @@
     }
     function showError(msg) {
       hideAll();
-      els.errMsg.textContent = msg;
+      els.errMsg.textContent = friendlyError(msg);
       els.err.classList.remove("hidden");
     }
     function escapeHtml(s) {
@@ -787,7 +823,7 @@
           }
           if (Date.now() - start > POLL_TIMEOUT_MS) {
             stopPolling();
-            showError("Polling timed out after 5 minutes.");
+            showError("Stopped waiting after 6 minutes without a final status. The workflow may still be running on the server; try again in a moment.");
           }
         } catch (err) {
           stopPolling();
@@ -953,7 +989,7 @@
     }
     function showError(msg) {
       hideAll();
-      els.errMsg.textContent = msg;
+      els.errMsg.textContent = friendlyError(msg);
       els.err.classList.remove("hidden");
     }
     function escapeHtml(s) {
@@ -1109,7 +1145,7 @@
     function setBusy(busy) {
       els.analyzeBtn.disabled = busy;
       els.githubBtn.disabled = busy;
-      els.status.textContent = busy ? "Analyzing…" : "";
+      els.status.textContent = busy ? "Analyzing… free models can take up to a minute" : "";
     }
     function hideAll() {
       els.empty.classList.add("hidden");
@@ -1118,7 +1154,7 @@
     }
     function showError(msg) {
       hideAll();
-      els.errMsg.textContent = msg;
+      els.errMsg.textContent = friendlyError(msg);
       els.err.classList.remove("hidden");
     }
   })();
