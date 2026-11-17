@@ -1,6 +1,6 @@
 # ZeroShift — agentic IAM and SCP governance on AWS
 
-**A team-built AWS Agentic AI Hackathon project exploring how AI agents can propose, inspect, and verify changes to IAM policies and AWS Organizations service control policies.** ZeroShift combines Python AWS Lambdas, Step Functions, CDK infrastructure, Amazon Bedrock, and two LangGraph agents with a five-tab browser interface. The repository includes local fixture data so its workflows can be explored without a live AWS Organization.
+**A solo-built AWS Agentic AI Hackathon project exploring how AI agents can propose, inspect, and verify changes to IAM policies and AWS Organizations service control policies.** ZeroShift combines Python AWS Lambdas, Step Functions, CDK infrastructure, Amazon Bedrock, and two LangGraph agents with a five-tab browser interface. The repository includes local fixture data so its workflows can be explored without a live AWS Organization.
 
 ## Live demo
 
@@ -94,4 +94,4 @@ Before enabling unattended writes, make safety conditions deterministic at the m
 
 ## Attribution
 
-Developer Craftsmen team · AWS Agentic AI Hackathon (2026). Internal/team licensing notice is present in the original repository; ask the team before changing its license, publishing copies, or claiming sole authorship.
+Solo project (Developer Craftsmen) · AWS Agentic AI Hackathon (2026). A licensing notice is present in the original repository; check it before changing the license or publishing copies.

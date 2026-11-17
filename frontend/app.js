@@ -18,6 +18,33 @@
     return apiUrlEl.value.trim().replace(/\/+$/, "");
   }
 
+  // ---------- Shared: which model backs the LLM steps ----------
+  // Defaults describe the AWS (Bedrock) deployment. A hosted demo API reports the model it really uses
+  // from its root endpoint (`llm.name` / `llm.label`), so the labels are never hard-coded to the wrong one.
+
+  const LLM = { name: "Kimi K2.5", nameOn: "Kimi K2.5 on Bedrock" };
+
+  function applyLlmLabels() {
+    document.querySelectorAll("[data-llm]").forEach((el) => { el.textContent = LLM[el.dataset.llm] || el.textContent; });
+  }
+
+  async function loadLlmInfo() {
+    const apiUrl = getApiUrl();
+    if (!apiUrl) return;
+    try {
+      const resp = await fetch(`${apiUrl}/`);
+      if (!resp.ok) return;
+      const info = (await resp.json()).llm;
+      if (info && info.name) {
+        LLM.name = info.name;
+        LLM.nameOn = info.label || info.name;
+        applyLlmLabels();
+      }
+    } catch (_) { /* no root endpoint (API Gateway) or offline: keep the defaults */ }
+  }
+  loadLlmInfo();
+  apiUrlEl.addEventListener("change", loadLlmInfo);
+
   // ============================================================
   // Router — sidebar tab switching
   // ============================================================
@@ -213,13 +240,13 @@
       { name: "LoadScp", label: "Load SCP" },
       { name: "CheckControlTower", label: "Check Control Tower" },
       { name: "CheckSize", label: "Check Size" },
-      { name: "ProposeRefactor", label: "Propose Refactor (Kimi K2.5)" },
+      { name: "ProposeRefactor", label: () => `Propose Refactor (${LLM.name})` },
       { name: "VerifyEquivalence", label: "Verify Equivalence" },
       { name: "CreateChangeRequest", label: "Create Change Request" },
     ];
 
     const POLL_INTERVAL_MS = 1500;
-    const POLL_TIMEOUT_MS = 5 * 60 * 1000;
+    const POLL_TIMEOUT_MS = 6 * 60 * 1000; // longer than the API's execution time limit, so a FAILED message arrives first
 
     const els = {
       scpBtns: document.querySelectorAll(".scp-btn"),
@@ -335,7 +362,7 @@
         li.innerHTML = `
           <span class="step-icon">${iconGlyph}</span>
           <div class="step-body">
-            <div class="step-name">${meta.label}</div>
+            <div class="step-name">${typeof meta.label === "function" ? meta.label() : meta.label}</div>
             <div class="step-detail">${stepDetail(meta.name, s, body)}</div>
           </div>
         `;
@@ -570,7 +597,7 @@
       { name: "CheckManaged", label: "Check ManagedBy tag" },
       { name: "ScanUsage", label: "Scan CloudTrail usage" },
       { name: "ReadIntentRegistry", label: "Read intent registry" },
-      { name: "ProposeReplacement", label: "Propose replacement (Kimi K2.5)" },
+      { name: "ProposeReplacement", label: () => `Propose replacement (${LLM.name})` },
       { name: "SimulateEquivalence", label: "Verify equivalence" },
       { name: "ScoreRisk", label: "Score risk tier" },
       { name: "WaitGracePeriod", label: "Grace period (MEDIUM only)" },
@@ -578,7 +605,7 @@
       { name: "UpdateIntentRegistry", label: "Update intent registry" },
     ];
     const POLL_INTERVAL_MS = 1500;
-    const POLL_TIMEOUT_MS = 5 * 60 * 1000;
+    const POLL_TIMEOUT_MS = 6 * 60 * 1000; // longer than the API's execution time limit, so a FAILED message arrives first
 
     const els = {
       lookback: document.getElementById("drift-lookback-input"),
@@ -675,7 +702,7 @@
             : ""
         }</div>
         ${drifted > 0 ? `
-        <div class="section-label" style="margin-top:8px;">Kimi rationale</div>
+        <div class="section-label" style="margin-top:8px;">${LLM.name === "Kimi K2.5" ? "Kimi" : "Model"} rationale</div>
         <div class="section-body">${escapeHtml(rationale || "—")}</div>
         <div class="section-label" style="margin-top:8px;">Policy diff</div>
         <div class="policy-diff">
@@ -787,7 +814,7 @@
         li.innerHTML = `
           <span class="step-icon">${icon}</span>
           <div class="step-body">
-            <div class="step-name">${meta.label}</div>
+            <div class="step-name">${typeof meta.label === "function" ? meta.label() : meta.label}</div>
             <div class="step-detail">${detailFor(meta.name, s)}</div>
           </div>
         `;
@@ -843,6 +870,9 @@
         els.terminalLabel.textContent = "Skipped";
         els.terminalDetail.textContent = "Role does not carry the ManagedBy=ZeroShift tag.";
         els.terminalMeta.textContent = "";
+      } else if (status === "FAILED") {
+        showError(`Execution failed. ${output.cause || ""}`);
+        return;
       } else if (status === "REJECTED_NOT_EQUIVALENT") {
         showError(`Equivalence check failed. ${(output.divergences || []).length} divergence(s).`);
         return;

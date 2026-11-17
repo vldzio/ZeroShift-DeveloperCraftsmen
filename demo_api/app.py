@@ -39,6 +39,7 @@ from part3.denial_analyzer import handler as denial_handler  # noqa: E402
 from part3.refactorer import handler as refactorer  # noqa: E402
 from part3.stale_detector import handler as stale_handler  # noqa: E402
 from shared import llm_context  # noqa: E402
+from shared.openai_compat import LlmError, model_chain  # noqa: E402
 
 from . import guard  # noqa: E402
 from .sfn_emulator import Execution  # noqa: E402
@@ -130,7 +131,27 @@ async def _json(req: Request) -> dict[str, Any]:
 
 @app.get("/")
 def root() -> dict[str, Any]:
-    return {"service": "zeroshift-demo-api", "mode": "fixture", "llmConfigured": bool(os.environ.get("LLM_BASE_URL"))}
+    return {
+        "service": "zeroshift-demo-api",
+        "mode": "fixture",
+        "llmConfigured": bool(os.environ.get("LLM_BASE_URL")),
+        "llm": llm_info(),
+    }
+
+
+def llm_info() -> dict[str, Any]:
+    """Which model backs the LLM steps, so the UI can label them truthfully (it defaults to the AWS wording)."""
+    from shared import llm_client
+
+    provider = llm_client._provider()
+    if provider == "openai-compatible":
+        return {
+            "provider": provider,
+            "name": "Free-tier LLMs",
+            "label": "free-tier LLMs via FreeLLMAPI gateway",
+            "models": [m.partition("@")[0] for m in model_chain(llm_client._model_id())],
+        }
+    return {"provider": provider, "name": None, "label": None, "models": []}
 
 
 @app.get("/healthz")
@@ -191,7 +212,7 @@ async def onboard_roles(req: Request):
 
 
 def _is_llm_error(exc: Exception) -> bool:
-    return type(exc).__module__.startswith("openai") or "LLM did not return" in str(exc)
+    return isinstance(exc, LlmError) or type(exc).__module__.startswith("openai") or "LLM did not return" in str(exc)
 
 
 def _friendly_error(exc: Exception) -> str:

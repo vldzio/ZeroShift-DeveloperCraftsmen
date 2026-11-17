@@ -9,10 +9,19 @@ with ``.$`` JSONPath, ``ResultPath``, ``$$.Execution.Name``, ``IsPresent``,
 """
 from __future__ import annotations
 
+import concurrent.futures
+import contextvars
 import copy
+import os
 import re
 import time
 from typing import Any, Callable
+
+# Time limits so a stuck LLM call ends the run as FAILED (with a message the UI shows) instead of RUNNING forever.
+# A worker thread cannot be killed, so these bound what the *user* waits for; the LLM client has its own budget.
+STEP_TIMEOUT_S = float(os.environ.get("SFN_STEP_TIMEOUT_S", "120"))
+AGENT_STEP_TIMEOUT_S = float(os.environ.get("SFN_AGENT_STEP_TIMEOUT_S", "240"))
+EXECUTION_TIMEOUT_S = float(os.environ.get("SFN_EXECUTION_TIMEOUT_S", "270"))
 
 _TOKEN = re.compile(r"\.([A-Za-z0-9_\-]+)|\[(\d+)\]")
 
@@ -81,6 +90,28 @@ def _choice_matches(rule: dict[str, Any], data: Any, ctx: dict[str, Any]) -> boo
     return False
 
 
+class ExecutionTimeout(TimeoutError):
+    """A step or the whole execution used up its time budget."""
+
+
+class _TimedOut(Exception):
+    pass
+
+
+def _call_with_timeout(fn: Callable[[dict[str, Any]], dict[str, Any]], params: dict[str, Any], timeout: float) -> Any:
+    """Run ``fn`` in a worker thread (keeping contextvars) and give up after ``timeout`` seconds."""
+    pool = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="sfn-task")
+    ctx = contextvars.copy_context()
+    fut = pool.submit(ctx.run, fn, params)
+    try:
+        done, _ = concurrent.futures.wait([fut], timeout=timeout)
+        if not done:
+            raise _TimedOut
+        return fut.result()
+    finally:
+        pool.shutdown(wait=False)
+
+
 class Execution:
     """Runs one state machine, recording per-state history for status polling."""
 
@@ -91,12 +122,16 @@ class Execution:
         resources: dict[str, Callable[[dict[str, Any]], dict[str, Any]]],
         name: str,
         wait_cap_seconds: float = 2.0,
+        step_timeout_s: float | None = None,
+        execution_timeout_s: float | None = None,
     ) -> None:
         self.definition = definition
         self.input = input_
         self.resources = resources
         self.name = name
         self.wait_cap = wait_cap_seconds
+        self.step_timeout = step_timeout_s
+        self.execution_timeout = EXECUTION_TIMEOUT_S if execution_timeout_s is None else execution_timeout_s
         self.status = "RUNNING"
         self.output: Any = None
         self.error: str | None = None
@@ -112,6 +147,24 @@ class Execution:
                 return
         self.history.append({"name": name, "type": type_, "status": status, "output": output})
 
+    def _run_task(self, state_name: str, resource: str, fn: Callable[[dict[str, Any]], dict[str, Any]], params: dict[str, Any]) -> Any:
+        left = self.execution_timeout - (time.time() - self.started)
+        if left <= 0:
+            raise ExecutionTimeout(
+                f"The workflow exceeded its {self.execution_timeout:.0f}s time limit before step '{state_name}'. "
+                "The free LLM pool may be slow or rate-limited; try again, or add your own key via 'LLM key'."
+            )
+        step_cap = self.step_timeout or (AGENT_STEP_TIMEOUT_S if "Agent" in resource else STEP_TIMEOUT_S)
+        limit = min(step_cap, left)
+        try:
+            return _call_with_timeout(fn, params, limit)
+        except _TimedOut:
+            which = "the workflow time limit" if limit < step_cap else f"the {step_cap:.0f}s step limit"
+            raise ExecutionTimeout(
+                f"Step '{state_name}' did not finish within {which} ({limit:.0f}s). "
+                "The free LLM pool may be slow or rate-limited; try again, or add your own key via 'LLM key'."
+            ) from None
+
     def run(self) -> None:
         ctx = {"Execution": {"Name": self.name}}
         data: Any = copy.deepcopy(self.input)
@@ -124,7 +177,7 @@ class Execution:
                     self._record(state_name, type_, "RUNNING")
                     params = _resolve(state.get("Parameters", {}), data, ctx)
                     fn = self.resources[state["Resource"]]
-                    result = fn(params)
+                    result = self._run_task(state_name, state["Resource"], fn, params)
                     self._record(state_name, type_, "SUCCEEDED", result)
                     data = _set_path(data, state.get("ResultPath", "$"), result)
                 elif type_ == "Choice":
