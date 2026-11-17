@@ -94,4 +94,4 @@ Before enabling unattended writes, make safety conditions deterministic at the m
 
 ## Attribution
 
-Solo project (Developer Craftsmen) · AWS Agentic AI Hackathon (2026). A licensing notice is present in the original repository; check it before changing the license or publishing copies.
+Solo project · AWS Agentic AI Hackathon (2026). A licensing notice is present in the original repository; check it before changing the license or publishing copies.
