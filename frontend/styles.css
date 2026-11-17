@@ -724,3 +724,9 @@ button.secondary { background: transparent; color: var(--accent); border: 1px so
 .status-inline:not(:empty) { display: inline-flex; align-items: center; flex-wrap: wrap; }
 @keyframes zs-spin { to { transform: rotate(360deg); } }
 .status-inline[data-idle]::before { display: none; }
+
+/* Every text/number field in the panels matches the SCP ID field (several were browser-default). */
+.input-panel input[type="text"], .input-panel input[type="number"], .input-panel input[type="url"], #code-input { min-height: 44px; padding: 10px 12px; border-radius: var(--radius); border: 1px solid var(--border-strong); background: var(--bg-input); color: var(--text); font-family: var(--mono); font-size: 13px; width: 100%; }
+#code-input { min-height: 280px; }
+.input-panel input[type="checkbox"] { width: 18px; height: 18px; vertical-align: -4px; margin-right: 6px; accent-color: var(--accent); }
+#onboard-discover-btn, #code-github-btn { color: var(--on-color); }
