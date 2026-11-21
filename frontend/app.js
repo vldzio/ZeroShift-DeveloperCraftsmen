@@ -65,7 +65,9 @@
         applyLlmLabels();
       }
     } catch (_) {  // offline or still waking: keep the default labels
-      setApiState("warn", "API not reachable yet (a sleeping demo API takes about a minute to wake)");
+      // A real API Gateway deployment has no CORS-enabled root route, so a failed probe there says nothing.
+      if (/\.execute-api\./.test(apiUrl)) setApiState("idle", "API set");
+      else setApiState("warn", "API not reachable yet (a sleeping demo API takes about a minute to wake)");
     }
   }
   loadLlmInfo();
