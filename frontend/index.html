@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-app="zeroshift">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -7,52 +7,54 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
+  <a class="skip" href="#main">Skip to content</a>
   <header class="app-header">
     <div class="brand">
-      <span class="brand-mark">Z</span>
+      <span class="brand-mark" aria-hidden="true">Z</span>
       <div class="brand-text">
-        <div class="brand-title">ZeroShift</div>
+        <h1 class="brand-title">ZeroShift</h1>
         <div class="brand-subtitle">Autonomous IAM lifecycle for AWS · Part 3</div>
       </div>
     </div>
     <div class="api-status">
       <label for="api-url">API endpoint</label>
-      <input id="api-url" type="text" placeholder="https://xxx.execute-api.us-east-1.amazonaws.com" />
+      <span id="api-state" class="api-state" role="status" aria-live="polite"></span>
+      <input id="api-url" type="url" spellcheck="false" placeholder="https://xxx.execute-api.us-east-1.amazonaws.com" />
     </div>
   </header>
 
   <div class="shell">
     <nav class="sidebar" aria-label="Feature navigation">
       <button class="nav-item active" data-view="denial">
-        <span class="nav-icon">◈</span>
+        <span class="nav-icon" aria-hidden="true">◈</span>
         <div class="nav-label">
           <div class="nav-title">Denial Analysis</div>
           <div class="nav-sub">SCP root-cause explainer</div>
         </div>
       </button>
       <button class="nav-item" data-view="refactor">
-        <span class="nav-icon">◆</span>
+        <span class="nav-icon" aria-hidden="true">◆</span>
         <div class="nav-label">
           <div class="nav-title">SCP Refactoring</div>
           <div class="nav-sub">Compress oversized SCPs</div>
         </div>
       </button>
       <button class="nav-item" data-view="stale">
-        <span class="nav-icon">◇</span>
+        <span class="nav-icon" aria-hidden="true">◇</span>
         <div class="nav-label">
           <div class="nav-title">Stale SCP Detection</div>
           <div class="nav-sub">Dead-deny recommendations</div>
         </div>
       </button>
       <button class="nav-item" data-view="drift">
-        <span class="nav-icon">✦</span>
+        <span class="nav-icon" aria-hidden="true">✦</span>
         <div class="nav-label">
           <div class="nav-title">IAM Drift Detection</div>
           <div class="nav-sub">Role scoping + remediation</div>
         </div>
       </button>
       <button class="nav-item" data-view="codeanalyzer">
-        <span class="nav-icon">◉</span>
+        <span class="nav-icon" aria-hidden="true">◉</span>
         <div class="nav-label">
           <div class="nav-title">Code Analyzer</div>
           <div class="nav-sub">Source → intent registry</div>
@@ -60,15 +62,17 @@
       </button>
     </nav>
 
+    <main id="main" class="views" tabindex="-1">
+
     <!-- ============================================================= -->
     <!-- DENIAL ANALYSIS VIEW                                           -->
     <!-- ============================================================= -->
-    <main class="view" id="view-denial">
+    <section class="view" id="view-denial">
       <div class="workspace">
         <section class="input-panel">
           <div class="panel-header">
             <h2>1. Choose a denial event</h2>
-            <p class="hint">Pick a canned fixture or paste your own CloudTrail access-denied event JSON.</p>
+            <p class="hint" id="event-json-hint">Pick a canned fixture or paste your own CloudTrail access-denied event JSON.</p>
           </div>
 
           <div class="fixture-picker">
@@ -86,11 +90,12 @@
             </button>
           </div>
 
-          <textarea id="event-json" spellcheck="false" placeholder="Paste a CloudTrail access-denied event JSON here…"></textarea>
+          <label class="scp-id-label" for="event-json">Event JSON</label>
+          <textarea id="event-json" aria-describedby="event-json-hint" spellcheck="false" placeholder="Paste a CloudTrail access-denied event JSON here…"></textarea>
 
           <div class="actions">
             <button id="analyze-btn" class="primary">Analyze Denial</button>
-            <span id="analyze-status" class="status-inline"></span>
+            <span id="analyze-status" class="status-inline" role="status"></span>
           </div>
         </section>
 
@@ -156,12 +161,12 @@
           </div>
         </section>
       </div>
-    </main>
+    </section>
 
     <!-- ============================================================= -->
     <!-- SCP REFACTORING VIEW                                           -->
     <!-- ============================================================= -->
-    <main class="view hidden" id="view-refactor">
+    <section class="view hidden" id="view-refactor">
       <div class="workspace">
         <section class="input-panel">
           <div class="panel-header">
@@ -189,7 +194,8 @@
 
           <div class="actions">
             <button id="refactor-btn" class="primary">Start Refactor</button>
-            <span id="refactor-status-inline" class="status-inline"></span>
+            <button id="refactor-stop-btn" class="secondary" type="button" hidden>Stop watching</button>
+            <span id="refactor-status-inline" class="status-inline" role="status"></span>
           </div>
 
           <label style="font-size:12px; color:var(--text-muted); margin-top:8px; display:block;">
@@ -262,11 +268,11 @@
           </div>
         </section>
       </div>
-    </main>
+    </section>
     <!-- ============================================================= -->
     <!-- STALE SCP DETECTION VIEW                                       -->
     <!-- ============================================================= -->
-    <main class="view hidden" id="view-stale">
+    <section class="view hidden" id="view-stale">
       <div class="workspace">
         <section class="input-panel">
           <div class="panel-header">
@@ -279,7 +285,7 @@
 
           <div class="actions">
             <button id="stale-btn" class="primary">Run Scan</button>
-            <span id="stale-status-inline" class="status-inline"></span>
+            <span id="stale-status-inline" class="status-inline" role="status"></span>
           </div>
         </section>
 
@@ -314,11 +320,11 @@
           </div>
         </section>
       </div>
-    </main>
+    </section>
     <!-- ============================================================= -->
     <!-- IAM DRIFT DETECTION VIEW (Part 2)                              -->
     <!-- ============================================================= -->
-    <main class="view hidden" id="view-drift">
+    <section class="view hidden" id="view-drift">
       <div class="workspace">
         <section class="input-panel">
           <div class="panel-header">
@@ -331,7 +337,7 @@
 
           <div class="actions">
             <button id="drift-scan-btn" class="primary">Run Drift Scan</button>
-            <span id="drift-status-inline" class="status-inline"></span>
+            <span id="drift-status-inline" class="status-inline" role="status"></span>
           </div>
 
           <label style="font-size:12px; color:var(--text-muted); margin-top:8px; display:block;">
@@ -401,11 +407,11 @@
           </div>
         </section>
       </div>
-    </main>
+    </section>
     <!-- ============================================================= -->
     <!-- CODE ANALYZER VIEW (Part 1)                                    -->
     <!-- ============================================================= -->
-    <main class="view hidden" id="view-codeanalyzer">
+    <section class="view hidden" id="view-codeanalyzer">
       <div class="workspace">
         <section class="input-panel">
           <div class="panel-header">
@@ -442,7 +448,7 @@
 
           <div class="actions">
             <button id="code-analyze-btn" class="primary">Analyze code</button>
-            <span id="code-status-inline" class="status-inline"></span>
+            <span id="code-status-inline" class="status-inline" role="status"></span>
           </div>
 
           <div class="panel-header" style="margin-top:12px;">
@@ -488,7 +494,7 @@
             <div class="section">
               <div class="section-label">Intent-registry delta for <span id="code-delta-role" style="font-family:var(--mono);">—</span></div>
               <div class="section-body">
-                <div style="margin-top:4px;"><span class="badge" style="background:var(--ok); color:#0b0d12;">ACTIVE add</span></div>
+                <div style="margin-top:4px;"><span class="badge badge-risk-low">ACTIVE add</span></div>
                 <ul id="code-add-list" class="key-list"></ul>
                 <div style="margin-top:8px;"><span class="badge badge-dead-deny">PENDING_REMOVAL</span></div>
                 <ul id="code-remove-list" class="key-list"></ul>
@@ -508,13 +514,14 @@
           </div>
         </section>
       </div>
+    </section>
     </main>
   </div>
 
   <footer class="app-footer">
     <span>ZeroShift · Part 3</span>
     <span class="footer-sep">·</span>
-    <span>Model: <code>moonshotai.kimi-k2.5</code></span>
+    <span>Model: <code data-llm="nameOn">Kimi K2.5 on Bedrock</code></span>
     <span class="footer-sep">·</span>
     <span>Region: <code>us-east-1</code></span>
   </footer>

@@ -48,34 +48,36 @@
   document.addEventListener("DOMContentLoaded", () => {
     // banner
     const banner = document.createElement("div");
-    banner.style.cssText = "background:#16233a;color:#bcd4ff;font:13px/1.45 system-ui,sans-serif;padding:8px 14px;text-align:center;border-bottom:1px solid #2a3a5a";
+    banner.className = "demo-banner";
+    banner.setAttribute("role", "region");
+    banner.setAttribute("aria-label", "About this demo");
     banner.innerHTML =
-      "Live demo &mdash; runs the real ZeroShift Lambdas on bundled fixtures (no AWS account). " +
+      "<b>Live demo on fixture data.</b> It runs the real ZeroShift Lambdas on bundled fixtures (no AWS account). " +
       "AI answers come from a free-tier LLM gateway, so each visitor gets a small daily allowance; " +
       "use <b>LLM key</b> (top right) to bring your own. " +
-      '<a href="https://github.com/vldzio/ZeroShift-DeveloperCraftsmen" target="_blank" rel="noopener" style="color:#9fc4ff">Source</a>';
+      '<a href="https://github.com/vldzio/ZeroShift-DeveloperCraftsmen" target="_blank" rel="noopener">Source</a>';
     document.body.insertBefore(banner, document.body.firstChild);
 
     // settings panel
     const host = document.querySelector(".api-status");
     if (!host) return;
     const wrap = document.createElement("details");
-    wrap.style.cssText = "margin-left:12px;position:relative;font-size:13px";
+    wrap.className = "byo";
     const options = PROVIDERS.map(([u, n]) => `<option value="${u}">${n}</option>`).join("");
     wrap.innerHTML =
-      '<summary style="cursor:pointer;color:var(--accent,#6ea8ff);list-style:none">LLM key<span id="byo-dot" style="margin-left:6px"></span></summary>' +
-      '<div style="position:absolute;right:0;top:28px;z-index:20;width:300px;padding:12px;background:var(--bg-elevated,#12151d);border:1px solid var(--border-strong,#3a4152);border-radius:8px">' +
-      '<div style="color:var(--text-muted,#8a91a3);margin-bottom:8px">Optional. Use your own OpenAI-compatible key instead of the shared free tier. Stored in this tab only.</div>' +
-      `<select id="byo-provider" style="width:100%;margin-bottom:8px">${options}</select>` +
-      '<input id="byo-key" type="password" autocomplete="off" placeholder="API key" style="width:100%;margin-bottom:8px" />' +
-      '<button id="byo-save" class="primary">Save</button> <button id="byo-clear">Clear</button>' +
+      '<summary>LLM key<span id="byo-dot" class="byo-dot"></span></summary>' +
+      '<div class="byo-panel">' +
+      '<p>Optional. Use your own OpenAI-compatible key instead of the shared free tier. Stored in this tab only.</p>' +
+      `<label for="byo-provider">Provider</label><select id="byo-provider">${options}</select>` +
+      '<label for="byo-key">API key</label><input id="byo-key" type="password" autocomplete="off" placeholder="Paste your key" />' +
+      '<div class="byo-actions"><button id="byo-save" class="primary">Save</button> <button id="byo-clear" class="secondary">Clear</button></div>' +
       "</div>";
     host.appendChild(wrap);
 
     const keyEl = wrap.querySelector("#byo-key");
     const provEl = wrap.querySelector("#byo-provider");
     const dot = wrap.querySelector("#byo-dot");
-    const refresh = () => { dot.textContent = store.get(KEY) ? "●" : ""; dot.style.color = "#6fdc8c"; };
+    const refresh = () => { dot.textContent = store.get(KEY) ? "● own key" : ""; };
     provEl.value = store.get(URL_KEY) || PROVIDERS[0][0];
     refresh();
     wrap.querySelector("#byo-save").addEventListener("click", () => {
