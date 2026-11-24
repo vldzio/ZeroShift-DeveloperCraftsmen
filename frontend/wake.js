@@ -37,22 +37,33 @@
       .then(function (ok) { if (timer) clearTimeout(timer); return ok; });
   }
 
+  // Styled with the demos' shared "calm instrument" tokens, so it follows each page's
+  // light/dark mode and accent. Fallbacks are the shared base palette.
   var CSS = [
-    ".wake-backdrop{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(10,10,12,.62);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}",
-    ".wake-card{width:100%;max-width:440px;background:#ffffff;color:#1f1d1a;border-radius:12px;padding:28px 28px 22px;box-shadow:0 24px 70px rgba(0,0,0,.35);text-align:left}",
-    ".wake-head{display:flex;align-items:center;gap:12px;margin:0 0 10px}",
-    ".wake-title{font-size:19px;font-weight:650;letter-spacing:-.01em;margin:0}",
-    ".wake-spin{width:20px;height:20px;flex:none;border-radius:50%;border:2.5px solid #f1d5c9;border-top-color:#d97757;animation:wake-rot .8s linear infinite}",
-    ".wake-done{width:20px;height:20px;flex:none;border-radius:50%;background:#2f7d4a;color:#fff;display:none;align-items:center;justify-content:center;font-size:13px;font-weight:700}",
+    ".wake-backdrop{--wk-card:var(--card,var(--bg-elevated,#fff));--wk-text:var(--text,#1b1d17);--wk-muted:var(--muted,var(--text-muted,#555b4d));",
+      "--wk-border:var(--border,#d9d6c8);--wk-border-strong:var(--border-strong,#b9b5a5);--wk-accent:var(--accent,#8a5a00);--wk-accent-soft:var(--accent-soft,#f6ead2);",
+      "--wk-on-accent:var(--accent-text,var(--on-accent,#fff));--wk-good:var(--good,var(--ok,#2f6b2f));--wk-focus:var(--focus,#2b4fa8);",
+      "--wk-mono:var(--mono,ui-monospace,SFMono-Regular,Menlo,Consolas,monospace);--wk-sans:var(--sans,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif);",
+      "position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:20px;",
+      "background:color-mix(in srgb,var(--bg,#f7f6f1) 72%,transparent);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);font:16px/1.55 var(--wk-sans)}",
+    ".wake-card{width:100%;max-width:460px;background:var(--wk-card);color:var(--wk-text);border:1px solid var(--wk-border);border-radius:14px;padding:24px;",
+      "box-shadow:0 1px 2px #1b1d170d,0 12px 40px #1b1d1724;text-align:left}",
+    ".wake-eyebrow{font:600 12px/1.4 var(--wk-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--wk-accent);margin:0 0 6px}",
+    ".wake-title{font-size:1.2rem;font-weight:700;line-height:1.25;letter-spacing:-.01em;margin:0 0 8px;color:var(--wk-text)}",
+    ".wake-text{color:var(--wk-muted);margin:0 0 16px;font-size:15px}",
+    ".wake-status{display:flex;align-items:center;gap:10px;padding:10px 12px;margin:0 0 18px;border:1px solid var(--wk-border);border-radius:8px;",
+      "background:var(--wk-accent-soft);font:500 13px/1.4 var(--wk-mono);color:var(--wk-text)}",
+    ".wake-spin{width:12px;height:12px;flex:none;border-radius:50%;border:2px solid var(--wk-accent);border-top-color:transparent;animation:wake-rot .9s linear infinite}",
+    ".wake-done{display:none;width:16px;height:16px;flex:none;border-radius:50%;background:var(--wk-good);color:var(--wk-card);align-items:center;justify-content:center;font:700 10px/1 var(--wk-sans)}",
     ".wake-card.is-ready .wake-spin{display:none}.wake-card.is-ready .wake-done{display:inline-flex}",
-    ".wake-text{font-size:14.5px;line-height:1.6;color:#5c5650;margin:0 0 14px}",
-    ".wake-meta{font:500 12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#7a736c;margin:0 0 18px}",
-    ".wake-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}",
-    ".wake-primary{appearance:none;border:0;border-radius:8px;padding:11px 18px;font:600 14px system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;background:#d97757;color:#fff;cursor:pointer}",
-    ".wake-primary:hover{background:#c4633f}.wake-primary[hidden]{display:none}",
-    ".wake-link{appearance:none;background:none;border:0;padding:6px 0;font:500 13px system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;color:#7a736c;text-decoration:underline;text-underline-offset:3px;cursor:pointer}",
-    ".wake-link:hover{color:#1f1d1a}",
-    ".wake-card :focus-visible{outline:2px solid #d97757;outline-offset:3px}",
+    ".wake-actions{display:flex;flex-wrap:wrap;gap:10px}",
+    ".wake-card .wake-btn{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 18px;border-radius:8px;font:650 15px var(--wk-sans);cursor:pointer;transition:filter .15s,background-color .15s}",
+    ".wake-card .wake-primary{background:var(--wk-accent);color:var(--wk-on-accent);border:1px solid var(--wk-accent)}",
+    ".wake-card .wake-primary:hover{filter:brightness(1.08)}",
+    ".wake-card .wake-secondary{background:transparent;color:var(--wk-accent);border:1px solid var(--wk-border-strong)}",
+    ".wake-card .wake-secondary:hover{background:var(--wk-accent-soft);filter:none}",
+    ".wake-card .wake-btn[hidden]{display:none}",
+    ".wake-card :focus-visible{outline:2px solid var(--wk-focus);outline-offset:3px}",
     "@keyframes wake-rot{to{transform:rotate(360deg)}}",
     "@media (prefers-reduced-motion:reduce){.wake-spin{animation-duration:2.4s}}"
   ].join("");
@@ -79,13 +90,14 @@
     wrap.className = "wake-backdrop";
     wrap.innerHTML =
       '<div class="wake-card" role="dialog" aria-modal="true" aria-labelledby="wake-title" aria-describedby="wake-text">' +
-        '<div class="wake-head"><span class="wake-spin" aria-hidden="true"></span><span class="wake-done" aria-hidden="true">&#10003;</span>' +
-          '<h2 class="wake-title" id="wake-title">Waking up the demo server</h2></div>' +
+        '<p class="wake-eyebrow">Demo server</p>' +
+        '<h2 class="wake-title" id="wake-title">Waking up the demo server</h2>' +
         '<p class="wake-text" id="wake-text" aria-live="polite">This demo runs on a free server that sleeps when nobody is using it. ' +
           'It is starting up now, which usually takes 30 to 60 seconds.</p>' +
-        '<p class="wake-meta" aria-hidden="true">Waiting <span class="wake-elapsed">0:00</span></p>' +
-        '<div class="wake-actions"><button type="button" class="wake-primary" hidden>Start the demo</button>' +
-          '<button type="button" class="wake-link">Continue anyway</button></div>' +
+        '<div class="wake-status"><span class="wake-spin" aria-hidden="true"></span><span class="wake-done" aria-hidden="true">&#10003;</span>' +
+          '<span class="wake-meta">Starting up&hellip; <span class="wake-elapsed">0:00</span></span></div>' +
+        '<div class="wake-actions"><button type="button" class="wake-btn wake-primary" hidden>Start the demo</button>' +
+          '<button type="button" class="wake-btn wake-secondary">Continue anyway</button></div>' +
       '</div>';
     document.body.appendChild(wrap);
 
@@ -97,7 +109,7 @@
       meta: wrap.querySelector(".wake-meta"),
       elapsed: wrap.querySelector(".wake-elapsed"),
       primary: wrap.querySelector(".wake-primary"),
-      link: wrap.querySelector(".wake-link")
+      link: wrap.querySelector(".wake-secondary")
     };
     els.primary.addEventListener("click", close);
     els.link.addEventListener("click", close);
@@ -131,7 +143,7 @@
     els.card.classList.add("is-ready");
     els.title.textContent = "The demo is ready";
     els.text.textContent = "The server is up. Go ahead and try it out.";
-    els.meta.textContent = "Started in " + fmt(Date.now() - started);
+    els.meta.textContent = "Ready · started in " + fmt(Date.now() - started);
     els.primary.hidden = false;
     els.link.hidden = true;
     els.primary.focus();

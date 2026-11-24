@@ -1,54 +1,54 @@
-/* Tokens: shared "calm instrument" palette (same family as the portfolio and the other demos), ZeroShift blue accent. */
+/* Tokens: shared "calm instrument" layout with the blue palette used by every demo. */
 :root {
   color-scheme: light dark;
-  --bg: #f7f6f1;
+  --bg: #f6f7fb;
   --bg-elevated: #ffffff;
-  --bg-input: #f3f1ea;
-  --bg-hover: #ebe8de;
-  --border: #d9d6c8;
-  --border-strong: #b9b5a5;
-  --text: #1b1d17;
-  --text-muted: #555b4d;
-  --text-dim: #6b7163;
-  --accent: #2b4fa8;
-  --accent-soft: #e1e8f8;
+  --bg-input: #eef0f6;
+  --bg-hover: #e6e9f1;
+  --border: #dde1ea;
+  --border-strong: #c3c9d6;
+  --text: #161a23;
+  --text-muted: #5b6475;
+  --text-dim: #6b7385;
+  --accent: #2f5bea;
+  --accent-soft: #e6ecfd;
   --on-accent: #ffffff;
   --on-color: #ffffff;
-  --danger: #a8321f;
-  --warn: #7a5200;
-  --ok: #2f6b2f;
-  --info: #2b4fa8;
-  --focus: #2b4fa8;
-  --pending: #6b7163;
-  --running: #2b4fa8;
+  --danger: #c0392b;
+  --warn: #8a5a00;
+  --ok: #1e8e5a;
+  --info: #2f5bea;
+  --focus: #2f5bea;
+  --pending: #6b7385;
+  --running: #2f5bea;
   --radius: 8px;
   --radius-lg: 12px;
-  --shadow: 0 1px 2px #1b1d170d, 0 8px 24px #1b1d1712;
+  --shadow: 0 1px 2px #161a230d, 0 8px 24px #161a2312;
   --mono: ui-monospace, "IBM Plex Mono", SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   --sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #10120f;
-    --bg-elevated: #161914;
-    --bg-input: #1b2019;
-    --bg-hover: #222820;
-    --border: #343b30;
-    --border-strong: #4a5344;
-    --text: #eeeee3;
-    --text-muted: #abb1a2;
-    --text-dim: #8b9584;
-    --accent: #9bbcff;
-    --accent-soft: #1d2a45;
-    --on-accent: #0a1530;
-    --on-color: #10120f;
-    --danger: #ff9b8a;
-    --warn: #f2cc91;
-    --ok: #b3c895;
-    --info: #9bbcff;
-    --focus: #f2cc91;
-    --pending: #8b9584;
-    --running: #9bbcff;
+    --bg: #0b0d12;
+    --bg-elevated: #12151d;
+    --bg-input: #1a1e28;
+    --bg-hover: #1e232f;
+    --border: #262b38;
+    --border-strong: #3a4152;
+    --text: #e5e8ef;
+    --text-muted: #8a91a3;
+    --text-dim: #7d8497;
+    --accent: #6ea8ff;
+    --accent-soft: #2a3a5a;
+    --on-accent: #0b0d12;
+    --on-color: #0b0d12;
+    --danger: #ff7a7a;
+    --warn: #ffb457;
+    --ok: #6dd58c;
+    --info: #6ea8ff;
+    --focus: #ffb457;
+    --pending: #7d8497;
+    --running: #6ea8ff;
     --shadow: 0 12px 32px #0008;
   }
 }
