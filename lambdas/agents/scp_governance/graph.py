@@ -127,7 +127,8 @@ def spot_check_equivalence(state: ScpAgentState) -> ScpAgentState:
     sample = actions[:5] if len(actions) >= 5 else actions
 
     results = []
-    ok = True
+    # An empty sample proves nothing, so it does not count as a pass.
+    ok = bool(sample)
     for action in sample:
         orig = simulate_iam_action(action, state["original_document"])
         prop = simulate_iam_action(action, state["proposed_document"])
@@ -149,11 +150,20 @@ def assess_blast_radius(state: ScpAgentState) -> ScpAgentState:
     rl: ReasoningLogger = state["reasoning_logger"]  # type: ignore[assignment]
     try:
         targets = list_targets_for_scp(state["scp_id"])
-        target_count = targets.get("target_count", 0)
+        target_count = targets.get("target_count")
+        if not isinstance(target_count, int):
+            raise ValueError("list_targets_for_scp returned no target_count")
     except Exception as exc:
+        # Fail closed: an unknown blast radius blocks autonomous apply.
         log.warning("list_targets_failed", extra={"error": str(exc)})
-        target_count = 0
-        targets = {"targets": [], "error": str(exc)}
+        rl.log_step(
+            node="assess_blast_radius",
+            summary=f"Could not determine attached targets: {exc}",
+            tool_name="list_targets_for_scp",
+            tool_result={"targets": [], "error": str(exc)},
+            next_node="finish_failure",
+        )
+        return {**state, "outcome": "rejected", "rollback_reason": f"blast radius unknown: {exc}"}
     rl.log_step(
         node="assess_blast_radius",
         summary=f"SCP is attached to {target_count} target(s)",
@@ -164,8 +174,33 @@ def assess_blast_radius(state: ScpAgentState) -> ScpAgentState:
     return {**state, "target_count": target_count}
 
 
+MAX_AUTONOMOUS_TARGETS = 50
+
+
+def _hard_guard_reason(state: ScpAgentState) -> str | None:
+    """Deterministic apply preconditions, enforced regardless of the model's decision."""
+    if state.get("control_tower_managed"):
+        return "Control Tower-managed SCP; ZeroShift must not touch"
+    if state.get("spot_check_ok") is not True:
+        return "spot-check equivalence did not pass"
+    target_count = state.get("target_count")
+    if not isinstance(target_count, int):
+        return "blast radius unknown"
+    if target_count > MAX_AUTONOMOUS_TARGETS:
+        return "blast radius too large for autonomous apply; human approval required"
+    return None
+
+
 def deliberate(state: ScpAgentState) -> ScpAgentState:
     rl: ReasoningLogger = state["reasoning_logger"]  # type: ignore[assignment]
+    guard = _hard_guard_reason(state)
+    if guard:
+        rl.log_step(
+            node="deliberate",
+            summary=f"Deterministic guard: REJECT - {guard}",
+            next_node="finish_failure",
+        )
+        return {**state, "outcome": "rejected", "rollback_reason": guard}
     context = {
         "scp_id": state.get("scp_id"),
         "scp_name": state.get("scp_name"),
@@ -311,7 +346,10 @@ def build_graph():
     graph.add_conditional_edges("assess_ct_guard", route_from_ct)
     graph.add_edge("snapshot_current", "spot_check_equivalence")
     graph.add_edge("spot_check_equivalence", "assess_blast_radius")
-    graph.add_edge("assess_blast_radius", "deliberate")
+    def route_from_blast_radius(state: ScpAgentState) -> str:
+        return "finish_failure" if state.get("outcome") else "deliberate"
+
+    graph.add_conditional_edges("assess_blast_radius", route_from_blast_radius)
     graph.add_conditional_edges("deliberate", route_from_deliberate)
     graph.add_conditional_edges("apply_scp", route_from_apply)
     graph.add_conditional_edges("verify_scp", route_from_verify)

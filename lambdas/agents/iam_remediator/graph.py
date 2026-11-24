@@ -49,8 +49,8 @@ class IamAgentState(TypedDict, total=False):
 _ASSESS_PROMPT = """You are an autonomous IAM remediation agent. You are handed a proposed IAM policy
 that removes a set of actions from a role's currently-attached customer-managed policy.
 
-Your job: decide whether to (a) run simulations first, (b) directly apply the proposal,
-or (c) reject the proposal.
+Your job: decide whether to (a) run per-action simulations, which always precede
+any apply, or (b) reject the proposal.
 
 Rules:
 - If actions_to_remove is empty, REJECT with reason "no drift".
@@ -58,7 +58,7 @@ Rules:
 - Otherwise, SIMULATE first — run per-action simulator checks before mutating IAM.
 
 Respond with a JSON object matching this shape (no prose):
-{{"decision": "SIMULATE" | "APPLY" | "REJECT", "rationale": "<one sentence>"}}"""
+{{"decision": "SIMULATE" | "REJECT", "rationale": "<one sentence>"}}"""
 
 
 _VERIFY_PROMPT = """You just applied a new IAM policy version. The re-fetched document is below.
@@ -108,33 +108,51 @@ def _decide_via_llm(prompt: str, context: dict[str, Any]) -> dict[str, Any]:
 
 def assess_proposal(state: IamAgentState) -> IamAgentState:
     rl: ReasoningLogger = state["reasoning_logger"]  # type: ignore[assignment]
+    actions = state.get("actions_to_remove") or []
+    risk_tier = str(state.get("risk_tier") or "").upper()
     context = {
         "role_arn": state.get("role_arn"),
         "policy_arn": state.get("policy_arn"),
         "risk_tier": state.get("risk_tier"),
-        "actions_to_remove": state.get("actions_to_remove", []),
-        "removed_count": len(state.get("actions_to_remove") or []),
+        "actions_to_remove": actions,
+        "removed_count": len(actions),
     }
+
+    # Hard preconditions are enforced in code, independent of the model.
+    hard_reject = None
+    if not actions:
+        hard_reject = "no drift"
+    elif risk_tier != "LOW":
+        hard_reject = f"risk tier {risk_tier or 'UNKNOWN'} requires human approval, not the LOW-tier agent"
+    if hard_reject:
+        rl.log_step(
+            node="assess_proposal",
+            summary=f"Deterministic guard: REJECT - {hard_reject}",
+            next_node="finish_failure",
+        )
+        return {**state, "outcome": "rejected", "rollback_reason": hard_reject}
+
     decision = _decide_via_llm(_ASSESS_PROMPT, context)
+    rejected = decision.get("decision") == "REJECT"
     rl.log_step(
         node="assess_proposal",
-        summary=f"LLM decision: {decision.get('decision')} — {decision.get('rationale', '')}",
+        summary=f"LLM decision: {decision.get('decision')} - {decision.get('rationale', '')}",
         llm_output=decision,
-        next_node="run_simulations" if decision.get("decision") == "SIMULATE" else "finish_failure",
+        next_node="finish_failure" if rejected else "run_simulations",
     )
-    if decision.get("decision") == "REJECT":
+    if rejected:
         return {**state, "outcome": "rejected", "rollback_reason": decision.get("rationale", "")}
-    if decision.get("decision") == "APPLY":
-        # Agent chose to skip simulation. Allow but log.
-        return {**state, "simulator_ok": True, "outcome": ""}
-    return {**state, "outcome": ""}
+    # Every non-rejected proposal goes through simulation: a policy is never
+    # mutated without a passing simulator check.
+    return {**state, "simulator_ok": False, "outcome": ""}
 
 
 def run_simulations(state: IamAgentState) -> IamAgentState:
     rl: ReasoningLogger = state["reasoning_logger"]  # type: ignore[assignment]
     results: list[dict[str, Any]] = []
-    ok = True
-    for action in state.get("actions_to_remove") or []:
+    actions = state.get("actions_to_remove") or []
+    ok = bool(actions)
+    for action in actions:
         # Simulate against the ORIGINAL — should be Allow.
         orig = simulate_iam_action(action, state["original_policy"])
         # Simulate against the PROPOSED — should be implicitDeny.
@@ -186,7 +204,14 @@ def verify(state: IamAgentState) -> IamAgentState:
         "match": proposed_allow == fetched_allow,
     }
     llm_result = _decide_via_llm(_VERIFY_PROMPT, context)
-    ok = bool(llm_result.get("verified"))
+    # The deterministic comparison decides; the model must also agree.
+    ok = bool(context["match"]) and bool(llm_result.get("verified"))
+    if ok:
+        reason = ""
+    elif not context["match"]:
+        reason = "re-fetched Allow actions differ from the proposed policy"
+    else:
+        reason = llm_result.get("rationale") or "verification failed"
     rl.log_step(
         node="verify",
         summary=f"Verification: {ok} — {llm_result.get('rationale', '')}",
@@ -198,7 +223,7 @@ def verify(state: IamAgentState) -> IamAgentState:
     return {
         **state,
         "verified": ok,
-        "rollback_reason": "" if ok else llm_result.get("rationale", "verification failed"),
+        "rollback_reason": reason,
     }
 
 
@@ -271,8 +296,6 @@ def build_graph():
     def route_from_assess(state: IamAgentState) -> str:
         if state.get("outcome") == "rejected":
             return "finish_failure"
-        if state.get("simulator_ok"):
-            return "apply"
         return "run_simulations"
 
     def route_from_simulations(state: IamAgentState) -> str:

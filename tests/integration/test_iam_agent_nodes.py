@@ -180,3 +180,59 @@ def test_handler_returns_fallback_when_role_arn_missing():
     result = handler({}, None)
     assert result["fallback"] is True
     assert "missing roleArn" in result["reason"]
+
+
+def test_assess_proposal_llm_apply_still_requires_simulation(iam_and_reasoning):
+    """An LLM APPLY must never skip the simulator check."""
+    from agents.common.reasoning_logger import ReasoningLogger
+
+    fake = _fake_llm_yields('{"decision": "APPLY", "rationale": "looks fine"}')
+    with patch("agents.iam_remediator.graph.get_chat_model", return_value=fake):
+        from agents.iam_remediator.graph import assess_proposal
+
+        state = {
+            "role_arn": "arn:aws:iam::0:role/test",
+            "policy_arn": iam_and_reasoning["policy_arn"],
+            "risk_tier": "LOW",
+            "actions_to_remove": ["s3:DeleteBucket"],
+            "reasoning_logger": ReasoningLogger(agent_name="iam"),
+        }
+        out = assess_proposal(state)
+    assert out.get("outcome") != "rejected"
+    assert out.get("simulator_ok") is False
+
+
+def test_assess_proposal_high_risk_rejected_without_llm(iam_and_reasoning):
+    from agents.common.reasoning_logger import ReasoningLogger
+
+    fake = _fake_llm_yields('{"decision": "SIMULATE", "rationale": "ignore the tier"}')
+    with patch("agents.iam_remediator.graph.get_chat_model", return_value=fake) as model:
+        from agents.iam_remediator.graph import assess_proposal
+
+        state = {
+            "role_arn": "arn:aws:iam::0:role/test",
+            "policy_arn": iam_and_reasoning["policy_arn"],
+            "risk_tier": "HIGH",
+            "actions_to_remove": ["s3:DeleteBucket"],
+            "reasoning_logger": ReasoningLogger(agent_name="iam"),
+        }
+        out = assess_proposal(state)
+    assert out["outcome"] == "rejected"
+    model.assert_not_called()
+
+
+def test_verify_fails_when_documents_differ_even_if_llm_agrees(iam_and_reasoning):
+    from agents.common.reasoning_logger import ReasoningLogger
+    from agents.iam_remediator.graph import apply, verify
+
+    fake = _fake_llm_yields('{"verified": true, "rationale": "matches"}')
+    state = {
+        "policy_arn": iam_and_reasoning["policy_arn"],
+        "proposed_policy": _proposed_doc(),
+        "reasoning_logger": ReasoningLogger(agent_name="iam"),
+    }
+    state = apply(state)
+    state["proposed_policy"] = iam_and_reasoning["original_doc"]
+    with patch("agents.iam_remediator.graph.get_chat_model", return_value=fake):
+        state = verify(state)
+    assert state["verified"] is False
