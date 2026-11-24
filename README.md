@@ -4,8 +4,6 @@
 
 **Live demo:** [zeroshift-demo.vercel.app](https://zeroshift-demo.vercel.app). It runs the real Lambda handlers on fixture data, with no AWS account involved.
 
-Built for the AWS Agentic AI Hackathon (2026).
-
 ## What it does
 
 | Area | Approach | Code |
