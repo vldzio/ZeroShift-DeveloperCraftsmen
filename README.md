@@ -2,7 +2,7 @@
 
 **AI agents that propose, verify, and explain changes to IAM policies and AWS Organizations service control policies (SCPs).** ZeroShift combines Python AWS Lambdas, Step Functions, CDK infrastructure, Amazon Bedrock, and two LangGraph agents behind a five-tab browser console. Bundled fixture data lets you explore every workflow without a live AWS Organization.
 
-**Live demo:** [zeroshift-demo.vercel.app](https://zeroshift-demo.vercel.app) (runs on fixture data)
+**Live demo:** [zeroshift-demo.vercel.app](https://zeroshift-demo.vercel.app). It runs the real Lambda handlers on fixture data, with no AWS account involved.
 
 Built for the AWS Agentic AI Hackathon (2026).
 
@@ -63,10 +63,36 @@ make deploy                           # packages Lambdas and the agent layer; de
 
 After deployment, enter the API Gateway endpoint from the CDK output in the console. The account needs Bedrock model access in the target region.
 
+## Live demo
+
+The hosted console runs the **real Lambda handlers** in fixture mode through `demo_api/`, a FastAPI adapter whose routes mirror API Gateway:
+
+```text
+Browser (Vercel, frontend/) ──► demo_api container
+                                  ├─ rate limits, bring-your-own-key, CORS
+                                  ├─ real Lambdas + Step Functions emulator (runs infrastructure/step_functions/*.json)
+                                  ├─ moto sandbox for DynamoDB / SNS / IAM
+                                  └─ OpenAI-compatible LLM gateway ──► free-tier models (LangSmith tracing)
+```
+
+- In demo mode the LLM layer (`lambdas/shared/llm_client.py`) switches from Bedrock to an OpenAI-compatible provider, with schema-validated JSON and one retry. Without `LLM_BASE_URL` set, Bedrock is used as before.
+- Visitors get a daily allowance, or can enter their own OpenAI-compatible key under **LLM key**. The key stays in the browser tab and is never logged.
+- Run it locally:
+
+  ```bash
+  pip install -r demo_api/requirements.txt
+  LLM_BASE_URL=... LLM_API_KEY=... uvicorn demo_api.app:app --port 8130
+  make serve-frontend                 # then open http://localhost:8000/index.html?api=http://localhost:8130
+  ```
+
+- Deployment: container recipe in `deploy/space/`, frontend via `vercel.json` (set `ZEROSHIFT_API_URL`).
+
 ## Repository map
 
 ```text
 frontend/             Browser console (HTML, CSS, JavaScript)
+demo_api/             FastAPI adapter, Step Functions emulator, and sandbox for the hosted demo
+deploy/space/         Container recipe for the demo API
 infrastructure/       Python AWS CDK app and stacks
 lambdas/              Product Lambdas and LangGraph agents
 fixtures/             Sample policies, events, and organization data

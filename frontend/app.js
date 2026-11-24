@@ -18,6 +18,61 @@
     return apiUrlEl.value.trim().replace(/\/+$/, "");
   }
 
+  // Turn "HTTP 429: {\"error\": \"...\"}" into the API's own sentence, and add a next step for the common cases.
+  function friendlyError(msg) {
+    const m = /^HTTP (\d{3}): ([\s\S]*)$/.exec(String(msg || ""));
+    if (!m) {
+      if (/Failed to fetch|NetworkError|Load failed/i.test(msg)) return msg + " — the API could not be reached. A sleeping demo API takes about a minute to wake; try again shortly.";
+      return msg;
+    }
+    let text = m[2];
+    try { const j = JSON.parse(text); text = j.error || j.message || j.detail || text; } catch (_) { /* not JSON: keep the raw body */ }
+    if (m[1] === "429" && !/key/i.test(text)) text += " Add your own key under “LLM key” (top right) or try again tomorrow.";
+    if (m[1] >= "500" && m[1] < "600") text = "The API returned an error (" + m[1] + "): " + text + " Try again in a moment.";
+    return text;
+  }
+
+  // ---------- Shared: which model backs the LLM steps ----------
+  // Defaults describe the AWS (Bedrock) deployment. A hosted demo API reports the model it really uses
+  // from its root endpoint (`llm.name` / `llm.label`), so the labels are never hard-coded to the wrong one.
+
+  const LLM = { name: "Kimi K2.5", nameOn: "Kimi K2.5 on Bedrock" };
+
+  function applyLlmLabels() {
+    document.querySelectorAll("[data-llm]").forEach((el) => { el.textContent = LLM[el.dataset.llm] || el.textContent; });
+  }
+
+  // Header chip: honest connection state (the free hosted API sleeps when idle and needs about a minute to wake).
+  const apiStateEl = document.getElementById("api-state");
+  function setApiState(kind, text) {
+    if (!apiStateEl) return;
+    apiStateEl.className = "api-state" + (kind ? " api-state-" + kind : "");
+    apiStateEl.textContent = text;
+  }
+
+  async function loadLlmInfo() {
+    const apiUrl = getApiUrl();
+    if (!apiUrl) { setApiState("idle", "No API set"); return; }
+    setApiState("wait", "Connecting…");
+    try {
+      const resp = await fetch(`${apiUrl}/`);
+      setApiState("ok", "API reachable");
+      if (!resp.ok) return;
+      const info = (await resp.json()).llm;
+      if (info && info.name) {
+        LLM.name = info.name;
+        LLM.nameOn = info.label || info.name;
+        applyLlmLabels();
+      }
+    } catch (_) {  // offline or still waking: keep the default labels
+      // A real API Gateway deployment has no CORS-enabled root route, so a failed probe there says nothing.
+      if (/\.execute-api\./.test(apiUrl)) setApiState("idle", "API set");
+      else setApiState("warn", "API not reachable yet (a sleeping demo API takes about a minute to wake)");
+    }
+  }
+  loadLlmInfo();
+  apiUrlEl.addEventListener("change", loadLlmInfo);
+
   // ============================================================
   // Router — sidebar tab switching
   // ============================================================
@@ -38,8 +93,8 @@
         else el.classList.add("hidden");
       });
       buttons.forEach((b) => {
-        if (b.dataset.view === view) b.classList.add("active");
-        else b.classList.remove("active");
+        if (b.dataset.view === view) { b.classList.add("active"); b.setAttribute("aria-current", "page"); }
+        else { b.classList.remove("active"); b.removeAttribute("aria-current"); }
       });
       localStorage.setItem("zeroshift.activeView", view);
     }
@@ -129,7 +184,7 @@
 
     function setBusy(busy) {
       els.analyzeBtn.disabled = busy;
-      els.analyzeStatus.textContent = busy ? "Analyzing…" : "";
+      els.analyzeStatus.textContent = busy ? "Analyzing… free models can take up to a minute" : "";
     }
     function hideAll() {
       els.resultEmpty.classList.add("hidden");
@@ -138,7 +193,7 @@
     }
     function showError(msg) {
       hideAll();
-      els.errorMessage.textContent = msg;
+      els.errorMessage.textContent = friendlyError(msg);
       els.resultError.classList.remove("hidden");
     }
 
@@ -213,13 +268,13 @@
       { name: "LoadScp", label: "Load SCP" },
       { name: "CheckControlTower", label: "Check Control Tower" },
       { name: "CheckSize", label: "Check Size" },
-      { name: "ProposeRefactor", label: "Propose Refactor (Kimi K2.5)" },
+      { name: "ProposeRefactor", label: () => `Propose Refactor (${LLM.name})` },
       { name: "VerifyEquivalence", label: "Verify Equivalence" },
       { name: "CreateChangeRequest", label: "Create Change Request" },
     ];
 
     const POLL_INTERVAL_MS = 1500;
-    const POLL_TIMEOUT_MS = 5 * 60 * 1000;
+    const POLL_TIMEOUT_MS = 6 * 60 * 1000; // longer than the API's execution time limit, so a FAILED message arrives first
 
     const els = {
       scpBtns: document.querySelectorAll(".scp-btn"),
@@ -257,6 +312,13 @@
     });
 
     els.startBtn.addEventListener("click", start);
+    document.getElementById("refactor-stop-btn")?.addEventListener("click", () => {
+      // Client-side only: stops polling; the server-side workflow keeps running and is not cancelled.
+      stopPolling();
+      setBusy(false);
+      els.statusInline.dataset.idle = "1";
+      els.statusInline.textContent = "Stopped watching. The workflow may still finish on the server; press Start Refactor to check again.";
+    });
 
     async function start() {
       const apiUrl = getApiUrl();
@@ -305,7 +367,7 @@
           if (Date.now() - pollStart > POLL_TIMEOUT_MS) {
             stopPolling();
             setBusy(false);
-            showError("Polling timed out after 5 minutes.");
+            showError("Stopped waiting after 6 minutes without a final status. The workflow may still be running on the server; try again in a moment.");
             return;
           }
         } catch (err) {
@@ -335,7 +397,7 @@
         li.innerHTML = `
           <span class="step-icon">${iconGlyph}</span>
           <div class="step-body">
-            <div class="step-name">${meta.label}</div>
+            <div class="step-name">${typeof meta.label === "function" ? meta.label() : meta.label}</div>
             <div class="step-detail">${stepDetail(meta.name, s, body)}</div>
           </div>
         `;
@@ -345,7 +407,7 @@
 
     function stepDetail(name, s, body) {
       if (s.status === "PENDING") return "waiting";
-      if (s.status === "RUNNING") return "in progress…";
+      if (s.status === "RUNNING") return pollStart ? `in progress · ${Math.round((Date.now() - pollStart) / 1000)} s elapsed` : "in progress…";
       if (s.status === "SKIPPED") return "skipped";
       const out = s.output || {};
       if (name === "LoadScp" && out.originalSize) return `loaded · ${out.originalSize.toLocaleString()} bytes`;
@@ -432,7 +494,10 @@
 
     function setBusy(busy) {
       els.startBtn.disabled = busy;
-      els.statusInline.textContent = busy ? "Running workflow…" : "";
+      els.statusInline.textContent = busy ? "Running workflow… the AI steps can take a few minutes on free models" : "";
+      const stopBtn = document.getElementById("refactor-stop-btn");
+      if (stopBtn) stopBtn.hidden = !busy;
+      delete els.statusInline.dataset.idle;
     }
     function hideAll() {
       els.empty.classList.add("hidden");
@@ -441,7 +506,7 @@
     function showError(msg) {
       hideAll();
       els.errLabel.textContent = "Error";
-      els.errMsg.textContent = msg;
+      els.errMsg.textContent = friendlyError(msg);
       els.err.classList.remove("hidden");
     }
   })();
@@ -552,7 +617,7 @@
     }
     function showError(msg) {
       hideAll();
-      els.errMsg.textContent = msg;
+      els.errMsg.textContent = friendlyError(msg);
       els.err.classList.remove("hidden");
     }
     function escapeHtml(s) {
@@ -570,7 +635,7 @@
       { name: "CheckManaged", label: "Check ManagedBy tag" },
       { name: "ScanUsage", label: "Scan CloudTrail usage" },
       { name: "ReadIntentRegistry", label: "Read intent registry" },
-      { name: "ProposeReplacement", label: "Propose replacement (Kimi K2.5)" },
+      { name: "ProposeReplacement", label: () => `Propose replacement (${LLM.name})` },
       { name: "SimulateEquivalence", label: "Verify equivalence" },
       { name: "ScoreRisk", label: "Score risk tier" },
       { name: "WaitGracePeriod", label: "Grace period (MEDIUM only)" },
@@ -578,7 +643,7 @@
       { name: "UpdateIntentRegistry", label: "Update intent registry" },
     ];
     const POLL_INTERVAL_MS = 1500;
-    const POLL_TIMEOUT_MS = 5 * 60 * 1000;
+    const POLL_TIMEOUT_MS = 6 * 60 * 1000; // longer than the API's execution time limit, so a FAILED message arrives first
 
     const els = {
       lookback: document.getElementById("drift-lookback-input"),
@@ -675,7 +740,7 @@
             : ""
         }</div>
         ${drifted > 0 ? `
-        <div class="section-label" style="margin-top:8px;">Kimi rationale</div>
+        <div class="section-label" style="margin-top:8px;">${LLM.name === "Kimi K2.5" ? "Kimi" : "Model"} rationale</div>
         <div class="section-body">${escapeHtml(rationale || "—")}</div>
         <div class="section-label" style="margin-top:8px;">Policy diff</div>
         <div class="policy-diff">
@@ -760,7 +825,7 @@
           }
           if (Date.now() - start > POLL_TIMEOUT_MS) {
             stopPolling();
-            showError("Polling timed out after 5 minutes.");
+            showError("Stopped waiting after 6 minutes without a final status. The workflow may still be running on the server; try again in a moment.");
           }
         } catch (err) {
           stopPolling();
@@ -787,7 +852,7 @@
         li.innerHTML = `
           <span class="step-icon">${icon}</span>
           <div class="step-body">
-            <div class="step-name">${meta.label}</div>
+            <div class="step-name">${typeof meta.label === "function" ? meta.label() : meta.label}</div>
             <div class="step-detail">${detailFor(meta.name, s)}</div>
           </div>
         `;
@@ -843,6 +908,9 @@
         els.terminalLabel.textContent = "Skipped";
         els.terminalDetail.textContent = "Role does not carry the ManagedBy=ZeroShift tag.";
         els.terminalMeta.textContent = "";
+      } else if (status === "FAILED") {
+        showError(`Execution failed. ${output.cause || ""}`);
+        return;
       } else if (status === "REJECTED_NOT_EQUIVALENT") {
         showError(`Equivalence check failed. ${(output.divergences || []).length} divergence(s).`);
         return;
@@ -923,7 +991,7 @@
     }
     function showError(msg) {
       hideAll();
-      els.errMsg.textContent = msg;
+      els.errMsg.textContent = friendlyError(msg);
       els.err.classList.remove("hidden");
     }
     function escapeHtml(s) {
@@ -1079,7 +1147,7 @@
     function setBusy(busy) {
       els.analyzeBtn.disabled = busy;
       els.githubBtn.disabled = busy;
-      els.status.textContent = busy ? "Analyzing…" : "";
+      els.status.textContent = busy ? "Analyzing… free models can take up to a minute" : "";
     }
     function hideAll() {
       els.empty.classList.add("hidden");
@@ -1088,7 +1156,7 @@
     }
     function showError(msg) {
       hideAll();
-      els.errMsg.textContent = msg;
+      els.errMsg.textContent = friendlyError(msg);
       els.err.classList.remove("hidden");
     }
   })();
