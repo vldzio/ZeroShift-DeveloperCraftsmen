@@ -76,4 +76,4 @@ Before enabling unattended writes, make safety conditions deterministic at the m
 
 ## Attribution
 
-Developer Craftsmen team · AWS Agentic AI Hackathon (2026). Internal/team licensing notice is present in the original repository; ask the team before changing its license, publishing copies, or claiming sole authorship.
+Developer Craftsmen team · AWS Agentic AI Hackathon (2026). Internal/team licensing notice is present in the original repository;
